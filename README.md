@@ -1,53 +1,131 @@
 # Starweave
 
-Starweave is a tiny pure-Python CLI that turns any phrase into a deterministic SVG space poster.
+Starweave turns any phrase into a **deterministic** SVG space poster. The same
+seed always produces the same universe — so a poster is fully described by its
+seed, and you can regenerate it from the metadata baked into the file.
 
 ![Example poster](examples/sebby-launch.svg)
 
-## What it does
+It's pure standard-library Python at runtime (no dependencies), and it can emit
+static posters, **self-contained animated SVGs**, and **HTML contact-sheet
+galleries**.
 
-- Generates repeatable space art from a seed phrase.
-- Renders gradients, star fields, constellations, planets, rings, and orbit lines.
-- Exports normal SVG files that open in any browser or design tool.
-- Uses only the Python standard library at runtime.
+## The idea
+
+A seed phrase doesn't draw a picture directly. It expands into a **World** — a
+small bundle of facts (a mood, intensity knobs, which celestial features exist,
+a generated catalogue name) plus a factory of independent random streams. A
+stack of **Layers** then paints that world onto an SVG document:
+
+```
+ seed ── sha256 ──▶  World ────────────────▶  Scene (layer stack) ──▶  SVG
+                    │ mood, density,          │ background, nebula,     │ static
+                    │ turbulence,             │ galaxy, aurora, grid,   │ animated
+                    │ features{galaxy,moon,   │ orbits, stars,          │ gallery
+                    │  comets,aurora,rings…}  │ constellations, comets,
+                    │ name "Sigma Lyrae"      │ planets, moon, horizon,
+                    └ stream("stars") …       └ title
+```
+
+Two properties fall out of that design:
+
+- **Reproducible** — `(seed, palette, variant)` fully determines the poster.
+  The world summary and generation params are embedded in the SVG `<metadata>`.
+- **Composable** — every layer draws from its *own* named RNG stream
+  (`world.stream("stars")`), so adding, dropping, or reordering layers never
+  changes another layer's output. The galaxy looks identical whether or not
+  comets are drawn.
 
 ## Quick start
 
 ```bash
-python3 -m starweave "Sebby's launch" --out examples/sebby-launch.svg --palette aurora
+python3 -m starweave "Sebby's launch" --palette aurora --out poster.svg
 ```
 
-Install the CLI locally:
+Install the CLI:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 python3 -m pip install -e .
-starweave "late night code" --palette ember --out poster.svg --open
+starweave "late night code" --palette auto --out poster.svg --open
 ```
 
-## CLI options
+## Things to try
 
 ```bash
-starweave "your seed phrase" \
-  --width 1440 \
-  --height 900 \
-  --stars 320 \
-  --planets 5 \
-  --palette midnight \
-  --out poster.svg
+# Animated SVG — twinkling stars, drifting nebulae, orbiting planets.
+starweave "midnight compiler" --palette synthwave --animate --out anim.svg
+
+# Let the seed choose its own signature palette.
+starweave "tidal lock" --palette auto
+
+# A contact sheet of 9 deterministic variants of one phrase.
+starweave "deep field" --gallery 9 --out gallery.html --open
+
+# One poster per built-in palette, side by side.
+starweave "deep field" --gallery-palettes --out palettes.html
+
+# Inspect the world a seed expands into, without drawing anything.
+starweave "orbit coffee" --describe --palette auto
+
+# Sculpt the composition: keep or drop named layers.
+starweave "clean sky" --without galaxy,comets,grid
+starweave "minimal"   --only background,stars,title
 ```
 
-List available palettes:
+## CLI reference
 
-```bash
-starweave --list-palettes
+| Flag | Meaning |
+| --- | --- |
+| `--out PATH` | Output file (`.svg`, or `.html` for galleries). |
+| `--width` / `--height` | Canvas size (default 1440×900). |
+| `--stars` / `--planets` | Counts (the world scales density around these). |
+| `--palette NAME` | One of the built-ins, or `auto` to pick from the seed. |
+| `--variant N` | A different deterministic draw of the same seed. |
+| `--animate` | Emit an animated SVG (twinkle / drift / orbit). |
+| `--only A,B` / `--without A,B` | Include or exclude layers by name. |
+| `--gallery [N]` | HTML contact sheet of N seed variants (default 6). |
+| `--gallery-palettes` | Gallery with one poster per palette. |
+| `--describe` | Print the seed's world as JSON and exit. |
+| `--title` / `--no-title` | Override or hide the poster title. |
+| `--list-palettes` / `--list-layers` | Discoverability. |
+
+Ten palettes ship in the box: `aurora`, `ember`, `midnight`, `solar`, `rose`,
+`noir`, `synthwave`, `glacier`, `verdant`, `gilded` — plus `auto`.
+
+## Library use
+
+```python
+from starweave import render_poster, World
+
+svg = render_poster("late night code", palette="auto", animate=True)
+
+world = World.from_seed("late night code", "auto")
+print(world.name, world.summary()["features"])
+```
+
+## Project layout
+
+```
+src/starweave/
+  world.py    seed -> World (mood, knobs, features, name, RNG streams)
+  layers.py   composable Layer classes painted back-to-front
+  scene.py    World + layers -> SvgDoc
+  svg.py      SVG document builder (defs, CSS animation, unique ids, metadata)
+  palette.py  ten palettes + deterministic "auto"
+  naming.py   deterministic catalogue names and captions
+  gallery.py  many posters inlined on one self-contained HTML page
+  cli.py      argument parsing and file output
 ```
 
 ## Development
 
-Run the test suite:
-
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests
 ```
+
+CI runs the suite on Python 3.10–3.13 and smoke-tests the CLI on every push.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
