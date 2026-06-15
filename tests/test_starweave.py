@@ -130,6 +130,19 @@ class CliTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             run_cli(["seed", "--only", "background,not-a-layer"])
 
+    def test_cli_explorer_writes_standalone_html(self) -> None:
+        from starweave.webexport import explorer_html
+
+        html = explorer_html()
+        self.assertIn("<!doctype html>", html)
+        self.assertIn("starweave", html)
+        self.assertIn("<script>", html)
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "explorer.html"
+            self.assertEqual(run_cli(["seed", "--explorer", "--out", str(output)]), 0)
+            self.assertTrue(output.exists())
+            self.assertGreater(len(output.read_text(encoding="utf-8")), 5000)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -52,6 +52,33 @@ def _clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
     return max(low, min(high, value))
 
 
+_VOWELS = frozenset("aeiou")
+
+
+def semantics(text: str) -> dict[str, float]:
+    """Read meaning out of the *shape* of the phrase — no ML, just letters.
+
+    Vowel-rich phrases read as soft and bright; consonant-heavy ones as
+    turbulent; longer words pack the sky denser. These signals (all 0..1) are
+    blended into the world's knobs so the words genuinely steer the art rather
+    than just hashing into noise.
+    """
+
+    lowered = text.lower()
+    letters = [c for c in lowered if c.isalpha()]
+    n = len(letters) or 1
+    vowel_ratio = sum(1 for c in letters if c in _VOWELS) / n
+    words = [w for w in lowered.split() if w]
+    avg_word = (sum(len(w) for w in words) / len(words)) if words else float(len(letters))
+    return {
+        "vowel_ratio": vowel_ratio,
+        "avg_word": avg_word,
+        "brightness": _clamp(0.35 + vowel_ratio),
+        "turbulence": _clamp(0.25 + (1.0 - vowel_ratio) * 0.85),
+        "density": _clamp(0.35 + min(avg_word, 9.0) / 12.0),
+    }
+
+
 @dataclass
 class World:
     seed: str
@@ -67,6 +94,7 @@ class World:
     features: dict[str, bool] = field(default_factory=dict)
     name: str = ""
     caption: str = ""
+    reading: dict[str, float] = field(default_factory=dict)
 
     @classmethod
     def from_seed(cls, seed: str, palette_name: str = "aurora", variant: int = 0) -> "World":
@@ -87,10 +115,22 @@ class World:
 
     def _derive(self) -> None:
         bias = _MOOD_BIAS.get(self.palette.mood, _MOOD_BIAS["balanced"])
+        sem = semantics(self.seed)
         roll = self.stream("knobs")
-        self.turbulence = _clamp(roll.uniform(0.25, 0.85) * bias["turbulence"])
-        self.brightness = _clamp(roll.uniform(0.55, 0.95) * bias["brightness"])
-        self.density = _clamp(roll.uniform(0.5, 0.95) * bias["density"])
+
+        # Each knob is part seeded-chance (with the palette's mood bias) and part
+        # meaning read from the phrase, so the words you choose actually show up.
+        def mix(roll_value: float, key: str) -> float:
+            base = _clamp(roll_value * bias[key])
+            return _clamp(0.45 * base + 0.55 * sem[key])
+
+        self.turbulence = mix(roll.uniform(0.25, 0.85), "turbulence")
+        self.brightness = mix(roll.uniform(0.55, 0.95), "brightness")
+        self.density = mix(roll.uniform(0.5, 0.95), "density")
+        self.reading = {
+            "vowel_ratio": round(sem["vowel_ratio"], 3),
+            "avg_word": round(sem["avg_word"], 2),
+        }
 
         feature_roll = self.stream("features")
         self.features = {
@@ -139,5 +179,6 @@ class World:
             "turbulence": round(self.turbulence, 3),
             "brightness": round(self.brightness, 3),
             "density": round(self.density, 3),
+            "reading": self.reading,
             "features": [k for k, v in self.features.items() if v],
         }

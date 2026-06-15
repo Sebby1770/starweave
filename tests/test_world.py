@@ -7,7 +7,7 @@ import unittest
 from starweave.options import RenderOptions
 from starweave.morph import morph_cells
 from starweave.palette import PALETTES, blend_palette, resolve_palette_name
-from starweave.world import World
+from starweave.world import World, semantics
 
 
 class WorldTests(unittest.TestCase):
@@ -86,6 +86,27 @@ class BlendTests(unittest.TestCase):
         lo, hi = sorted((a.turbulence, b.turbulence))
         self.assertGreaterEqual(mid.turbulence, lo - 1e-9)
         self.assertLessEqual(mid.turbulence, hi + 1e-9)
+
+
+class SemanticTests(unittest.TestCase):
+    def test_signals_are_in_range(self) -> None:
+        for text in ("a", "the quiet sky", "crwth blvd", "x" * 30):
+            sem = semantics(text)
+            for key in ("vowel_ratio", "brightness", "turbulence", "density"):
+                self.assertGreaterEqual(sem[key], 0.0)
+                self.assertLessEqual(sem[key], 1.0)
+
+    def test_vowels_brighten_consonants_roughen(self) -> None:
+        bright = World.from_seed("aurora oasis aria", "midnight")
+        rough = World.from_seed("crwth blvd grmph", "midnight")
+        self.assertGreater(bright.brightness, rough.brightness)
+        self.assertGreater(rough.turbulence, bright.turbulence)
+
+    def test_reading_is_deterministic_and_reported(self) -> None:
+        a = World.from_seed("seed phrase", "ember")
+        b = World.from_seed("seed phrase", "ember")
+        self.assertEqual(a.reading, b.reading)
+        self.assertIn("vowel_ratio", a.summary()["reading"])
 
 
 class MorphTests(unittest.TestCase):

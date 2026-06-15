@@ -69,6 +69,17 @@ starweave "deep field" --gallery-palettes --out palettes.html
 # from the first seed while palette and mood interpolate — one sky, shifting.
 starweave "ember tide" --morph "glacial drift" --frames 9 --out morph.html
 
+# A self-contained web explorer — type a phrase, morph, save the SVG. No deps.
+starweave --explorer --out web/explorer.html   # then open it in any browser
+```
+
+A prebuilt copy lives at [`web/explorer.html`](web/explorer.html). The poster's
+mood is partly read from the phrase itself: vowel-rich phrases render brighter,
+consonant-heavy ones more turbulent, longer words denser. Inspect it with:
+
+```bash
+starweave "the long quiet between stars" --describe   # see the "reading"
+
 # Inspect the world a seed expands into, without drawing anything.
 starweave "orbit coffee" --describe --palette auto
 
@@ -91,6 +102,7 @@ starweave "minimal"   --only background,stars,title
 | `--gallery [N]` | HTML contact sheet of N seed variants (default 6). |
 | `--gallery-palettes` | Gallery with one poster per palette. |
 | `--morph SEED_B [--frames N]` | Interpolate the seed-space from the seed to `SEED_B`. |
+| `--explorer` | Write a self-contained interactive web explorer (HTML). |
 | `--describe` | Print the seed's world as JSON and exit. |
 | `--title` / `--no-title` | Override or hide the poster title. |
 | `--list-palettes` / `--list-layers` | Discoverability. |
