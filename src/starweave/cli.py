@@ -55,6 +55,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Wrote {output} — open it in a browser")
         return 0
 
+    if args.sonify:
+        from .sonify import sonify
+
+        world = World.from_seed(seed, args.palette, args.variant)
+        output = Path(args.out or "starweave.wav")
+        if str(output.parent) not in ("", "."):
+            output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(sonify(world, seconds=args.seconds))
+        print(f"Wrote {output} ({args.seconds:g}s, mood={world.palette.mood})")
+        return 0
+
     if args.morph is not None:
         return _run_morph(args, seed)
 
@@ -184,6 +195,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--morph", metavar="SEED_B", help="Interpolate the seed-space from this seed to SEED_B (HTML strip).")
     parser.add_argument("--frames", type=_positive_int, default=7, help="Number of frames for --morph.")
     parser.add_argument("--explorer", action="store_true", help="Write a self-contained interactive web explorer (HTML).")
+    parser.add_argument("--sonify", action="store_true", help="Render the seed as a deterministic WAV tune.")
+    parser.add_argument("--seconds", type=float, default=12.0, help="Length of the --sonify tune.")
     parser.add_argument("--describe", action="store_true", help="Print the seed's world as JSON and exit.")
     parser.add_argument("--open", action="store_true", help="Open the result after writing it.")
     parser.add_argument("--list-palettes", action="store_true", help="List palette names and exit.")

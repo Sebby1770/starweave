@@ -71,6 +71,10 @@ starweave "ember tide" --morph "glacial drift" --frames 9 --out morph.html
 
 # A self-contained web explorer — type a phrase, morph, save the SVG. No deps.
 starweave --explorer --out web/explorer.html   # then open it in any browser
+
+# Hear the seed: the same World that paints the poster scores a short tune
+# (scale from mood, tempo from turbulence). Pure stdlib -> a deterministic WAV.
+starweave "the long quiet between stars" --sonify --seconds 12 --out song.wav
 ```
 
 A prebuilt copy lives at [`web/explorer.html`](web/explorer.html). The poster's
@@ -103,6 +107,7 @@ starweave "minimal"   --only background,stars,title
 | `--gallery-palettes` | Gallery with one poster per palette. |
 | `--morph SEED_B [--frames N]` | Interpolate the seed-space from the seed to `SEED_B`. |
 | `--explorer` | Write a self-contained interactive web explorer (HTML). |
+| `--sonify [--seconds N]` | Render the seed as a deterministic WAV tune. |
 | `--describe` | Print the seed's world as JSON and exit. |
 | `--title` / `--no-title` | Override or hide the poster title. |
 | `--list-palettes` / `--list-layers` | Discoverability. |
