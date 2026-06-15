@@ -144,3 +144,30 @@ def get_palette(name: str, seed: str = "") -> Palette:
         raise ValueError(
             f"Unknown palette {name!r}. Choose from: {available}, auto"
         ) from exc
+
+
+def _lerp_hex(c1: str, c2: str, t: float) -> str:
+    a, b = c1.lstrip("#"), c2.lstrip("#")
+    channels = (
+        round(int(a[i : i + 2], 16) + (int(b[i : i + 2], 16) - int(a[i : i + 2], 16)) * t)
+        for i in (0, 2, 4)
+    )
+    return "#" + "".join(f"{max(0, min(255, c)):02x}" for c in channels)
+
+
+def _lerp_tuple(t1: tuple[str, ...], t2: tuple[str, ...], t: float) -> tuple[str, ...]:
+    return tuple(_lerp_hex(t1[i], t2[i], t) for i in range(min(len(t1), len(t2))))
+
+
+def blend_palette(a: Palette, b: Palette, t: float) -> Palette:
+    """Interpolate two palettes channel-by-channel. ``t`` in [0, 1]."""
+
+    return Palette(
+        name=f"{a.name}~{b.name}",
+        background=tuple(_lerp_tuple(a.background, b.background, t)),  # type: ignore[arg-type]
+        nebula=_lerp_tuple(a.nebula, b.nebula, t),
+        stars=_lerp_tuple(a.stars, b.stars, t),
+        planets=_lerp_tuple(a.planets, b.planets, t),
+        accent=_lerp_tuple(a.accent, b.accent, t),
+        mood=a.mood if t < 0.5 else b.mood,
+    )

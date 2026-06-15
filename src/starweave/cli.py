@@ -7,6 +7,7 @@ import webbrowser
 from pathlib import Path
 
 from .gallery import cells_for, render_gallery
+from .morph import morph_cells, render_morph
 from .layers import DEFAULT_LAYERS, LAYERS_BY_NAME, Layer
 from .options import (
     DEFAULT_HEIGHT,
@@ -46,6 +47,9 @@ def main(argv: list[str] | None = None) -> int:
         layers = _select_layers(args.only, args.without)
     except ValueError as exc:
         parser.error(str(exc))
+
+    if args.morph is not None:
+        return _run_morph(args, seed)
 
     if args.gallery is not None or args.gallery_palettes:
         return _run_gallery(args, seed)
@@ -100,6 +104,30 @@ def _run_gallery(args: argparse.Namespace, seed: str) -> int:
     return 0
 
 
+def _run_morph(args: argparse.Namespace, seed: str) -> int:
+    width = args.width if args.width != DEFAULT_WIDTH else 480
+    height = args.height if args.height != DEFAULT_HEIGHT else 300
+    opts = RenderOptions(
+        width=width,
+        height=height,
+        stars=args.stars if args.stars != DEFAULT_STARS else 120,
+        planets=args.planets,
+        title=args.title,
+        show_title=not args.no_title,
+        animate=args.animate,
+    )
+    try:
+        cells = morph_cells(seed, args.morph, frames=args.frames, palette=args.palette, opts=opts)
+    except ValueError as exc:
+        print(f"starweave: {exc}", file=sys.stderr)
+        return 2
+    html = render_morph(seed, args.morph, cells)
+    output = Path(args.out or "morph.html")
+    _write(output, html, args.open)
+    print(f"Wrote {output} ({len(cells)} frames: {seed!r} -> {args.morph!r})")
+    return 0
+
+
 def _write(output: Path, text: str, open_after: bool) -> None:
     if str(output.parent) not in ("", "."):
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -146,6 +174,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-title", action="store_true", help="Hide poster title text.")
     parser.add_argument("--gallery", type=int, nargs="?", const=6, metavar="N", help="Write an HTML contact sheet of N seed variants.")
     parser.add_argument("--gallery-palettes", action="store_true", help="Gallery: one poster per built-in palette.")
+    parser.add_argument("--morph", metavar="SEED_B", help="Interpolate the seed-space from this seed to SEED_B (HTML strip).")
+    parser.add_argument("--frames", type=_positive_int, default=7, help="Number of frames for --morph.")
     parser.add_argument("--describe", action="store_true", help="Print the seed's world as JSON and exit.")
     parser.add_argument("--open", action="store_true", help="Open the result after writing it.")
     parser.add_argument("--list-palettes", action="store_true", help="List palette names and exit.")

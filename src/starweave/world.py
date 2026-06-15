@@ -21,7 +21,11 @@ import random
 from dataclasses import dataclass, field
 
 from . import naming
-from .palette import Palette, get_palette, resolve_palette_name
+from .palette import Palette, blend_palette, get_palette, resolve_palette_name
+
+
+def _lerp(a: float, b: float, t: float) -> float:
+    return a + (b - a) * t
 
 # How each palette mood biases the generator. Values multiply the base roll.
 _MOOD_BIAS = {
@@ -96,6 +100,29 @@ class World:
         name_rng = self.stream("name")
         self.name = naming.constellation_name(name_rng)
         self.caption = naming.caption(name_rng)
+
+    @classmethod
+    def blended(cls, a: "World", b: "World", t: float) -> "World":
+        """A world partway between two seeds — a point on the geodesic A→B.
+
+        Structure (RNG streams, feature set, and ``density`` which sets element
+        *counts*) is held from ``a`` so nothing pops in or out along the path;
+        only the continuous mood knobs and the palette interpolate. The result:
+        the same sky, smoothly shifting its colour and temperament from A to B.
+        """
+
+        return cls(
+            seed=a.seed,
+            palette=blend_palette(a.palette, b.palette, t),
+            variant=a.variant,
+            _root=a._root,
+            turbulence=_lerp(a.turbulence, b.turbulence, t),
+            brightness=_lerp(a.brightness, b.brightness, t),
+            density=a.density,  # held: keeps element counts stable across frames
+            features=dict(a.features),
+            name=f"{a.name} → {b.name}",
+            caption=a.caption,
+        )
 
     def has(self, feature: str) -> bool:
         return self.features.get(feature, False)

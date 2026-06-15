@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import unittest
 
-from starweave.palette import PALETTES, resolve_palette_name
+from starweave.options import RenderOptions
+from starweave.morph import morph_cells
+from starweave.palette import PALETTES, blend_palette, resolve_palette_name
 from starweave.world import World
 
 
@@ -61,6 +63,49 @@ class PaletteTests(unittest.TestCase):
 
     def test_explicit_name_passes_through(self) -> None:
         self.assertEqual(resolve_palette_name("ember", "ignored"), "ember")
+
+
+class BlendTests(unittest.TestCase):
+    def test_blend_endpoints_match_originals(self) -> None:
+        a, b = PALETTES["ember"], PALETTES["glacier"]
+        self.assertEqual(blend_palette(a, b, 0.0).nebula, a.nebula)
+        self.assertEqual(blend_palette(a, b, 1.0).nebula, b.nebula)
+
+    def test_blend_midpoint_is_valid_hex(self) -> None:
+        mid = blend_palette(PALETTES["ember"], PALETTES["glacier"], 0.5)
+        for role in (mid.background, mid.nebula, mid.stars, mid.planets, mid.accent):
+            for color in role:
+                self.assertRegex(color, r"^#[0-9a-f]{6}$")
+
+    def test_blended_world_holds_structure_interpolates_mood(self) -> None:
+        a = World.from_seed("ember tide", "ember")
+        b = World.from_seed("glacial drift", "glacier")
+        mid = World.blended(a, b, 0.5)
+        # density (element counts) is held from A; mood knobs move toward B.
+        self.assertEqual(mid.density, a.density)
+        lo, hi = sorted((a.turbulence, b.turbulence))
+        self.assertGreaterEqual(mid.turbulence, lo - 1e-9)
+        self.assertLessEqual(mid.turbulence, hi + 1e-9)
+
+
+class MorphTests(unittest.TestCase):
+    def test_morph_produces_requested_frames(self) -> None:
+        opts = RenderOptions(width=320, height=220, stars=40)
+        cells = morph_cells("alpha", "omega", frames=5, palette="auto", opts=opts)
+        self.assertEqual(len(cells), 5)
+
+    def test_morph_is_deterministic(self) -> None:
+        opts = RenderOptions(width=320, height=220, stars=40)
+        first = morph_cells("a", "b", frames=4, palette="ember", opts=opts)
+        second = morph_cells("a", "b", frames=4, palette="ember", opts=opts)
+        self.assertEqual([c.svg for c in first], [c.svg for c in second])
+
+    def test_morph_frames_have_distinct_ids(self) -> None:
+        # Distinct variant per frame -> distinct id prefix, so inlined SVGs on
+        # one page don't share gradient ids.
+        opts = RenderOptions(width=320, height=220, stars=40)
+        cells = morph_cells("a", "b", frames=3, palette="ember", opts=opts)
+        self.assertNotEqual(cells[0].svg, cells[1].svg)
 
 
 if __name__ == "__main__":

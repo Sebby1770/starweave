@@ -65,6 +65,10 @@ starweave "deep field" --gallery 9 --out gallery.html --open
 # One poster per built-in palette, side by side.
 starweave "deep field" --gallery-palettes --out palettes.html
 
+# Seed-space morph: walk the path between two phrases. The structure is held
+# from the first seed while palette and mood interpolate — one sky, shifting.
+starweave "ember tide" --morph "glacial drift" --frames 9 --out morph.html
+
 # Inspect the world a seed expands into, without drawing anything.
 starweave "orbit coffee" --describe --palette auto
 
@@ -86,6 +90,7 @@ starweave "minimal"   --only background,stars,title
 | `--only A,B` / `--without A,B` | Include or exclude layers by name. |
 | `--gallery [N]` | HTML contact sheet of N seed variants (default 6). |
 | `--gallery-palettes` | Gallery with one poster per palette. |
+| `--morph SEED_B [--frames N]` | Interpolate the seed-space from the seed to `SEED_B`. |
 | `--describe` | Print the seed's world as JSON and exit. |
 | `--title` / `--no-title` | Override or hide the poster title. |
 | `--list-palettes` / `--list-layers` | Discoverability. |
