@@ -77,9 +77,12 @@ starweave --explorer --out web/explorer.html   # then open it in any browser
 starweave "the long quiet between stars" --sonify --seconds 12 --out song.wav
 ```
 
-A prebuilt copy lives at [`web/explorer.html`](web/explorer.html). The poster's
-mood is partly read from the phrase itself: vowel-rich phrases render brighter,
-consonant-heavy ones more turbulent, longer words denser. Inspect it with:
+A prebuilt copy lives at [`web/explorer.html`](web/explorer.html) — it can even
+**play the seed's tune** in-browser (Web Audio), mirroring `--sonify`. The
+poster's mood is partly read from the phrase itself: vowel-rich phrases render
+brighter, consonant-heavy ones more turbulent, longer words denser. Some seeds
+also grow an **L-system filament** — a branching structure that emerges from a
+tiny rewrite grammar rather than being hand-placed. Inspect a seed with:
 
 ```bash
 starweave "the long quiet between stars" --describe   # see the "reading"

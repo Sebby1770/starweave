@@ -199,6 +199,66 @@ class AuroraBand(Layer):
 
 
 # --------------------------------------------------------------------------- #
+# Filaments — structure GROWN by an L-system, not hand-placed
+# --------------------------------------------------------------------------- #
+class Filament(Layer):
+    """A branching "cosmic web" grown by rewriting a string, then walked with a
+    turtle. The shape isn't authored — it emerges from a tiny grammar, so two
+    seeds with the same flag still grow visibly different tendrils."""
+
+    name = "filament"
+    requires = "filament"
+
+    _RULES = {"X": "F-[[X]+X]+F[+FX]-X", "F": "FF"}
+
+    def build(self, world: World, doc: SvgDoc, opts: RenderOptions) -> None:
+        rng = self.rng(world)
+        w, h = opts.width, opts.height
+
+        # Two rewrite passes give a sparse, recognisable branching plant
+        # (three would tangle into a dense net).
+        s = "X"
+        for _ in range(2):
+            s = "".join(self._RULES.get(c, c) for c in s)
+
+        color = rng.choice(world.palette.accent)
+        parts = [
+            f'<g fill="none" stroke="{color}" stroke-width="0.9" '
+            f'opacity="{0.12 + 0.08 * world.brightness:.2f}" '
+            f'stroke-linecap="round" filter="{doc.url("glow")}">'
+        ]
+        for _ in range(rng.randint(1, 2)):
+            x = rng.uniform(0.18 * w, 0.82 * w)
+            y = h * rng.uniform(0.92, 0.99)  # root near the bottom
+            angle = -90 + rng.uniform(-8, 8)  # grow nearly straight up
+            step = min(w, h) * rng.uniform(0.018, 0.026)
+            turn = rng.uniform(12, 17)  # narrow angle -> tree, not net
+            parts.append(self._walk(s, x, y, angle, step, turn))
+        parts.append("</g>")
+        doc.add("\n".join(parts))
+
+    @staticmethod
+    def _walk(s: str, x: float, y: float, angle: float, step: float, turn: float) -> str:
+        stack: list[tuple[float, float, float]] = []
+        segs: list[str] = []
+        for c in s:
+            if c == "F":
+                nx = x + math.cos(math.radians(angle)) * step
+                ny = y + math.sin(math.radians(angle)) * step
+                segs.append(f"M {fmt(x)} {fmt(y)} L {fmt(nx)} {fmt(ny)}")
+                x, y = nx, ny
+            elif c == "+":
+                angle += turn
+            elif c == "-":
+                angle -= turn
+            elif c == "[":
+                stack.append((x, y, angle))
+            elif c == "]" and stack:
+                x, y, angle = stack.pop()
+        return f'<path d="{" ".join(segs)}" />'
+
+
+# --------------------------------------------------------------------------- #
 # Grid — a faint perspective grid on the lower half
 # --------------------------------------------------------------------------- #
 class Grid(Layer):
@@ -527,6 +587,7 @@ DEFAULT_LAYERS: tuple[Layer, ...] = (
     Nebula(),
     Galaxy(),
     AuroraBand(),
+    Filament(),
     Grid(),
     Orbits(),
     Starfield(),

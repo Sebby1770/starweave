@@ -39,6 +39,7 @@
     <label>seed a<input id="sa" type="text" value="the long quiet between stars" autocomplete="off" size="30"></label>
     <label>seed b (morph target)<input id="sb" type="text" value="ember tide at the world's edge" autocomplete="off" size="30"></label>
     <button id="shuffle" title="random phrase"><i>↻</i> shuffle</button>
+    <button id="tune" title="play the seed's tune"><i>♪</i> play tune</button>
     <button id="dl" title="download SVG"><i>↓</i> save svg</button>
   </div>
   <div class="ctrl">
@@ -156,6 +157,23 @@
   $('t').addEventListener('input',function(){stop();render();});
   $('play').addEventListener('click',function(){timer?stop():play();});
   $('shuffle').addEventListener('click',function(){$('sa').value=POOL[(Math.random()*POOL.length)|0];$('t').value=0;stop();render();});
+  // --- sonification: the same World scores a tune (mirrors sonify.py) ---
+  var SCALES={serene:[0,2,4,7,9],radiant:[0,2,4,5,7,9,11],turbulent:[0,2,3,5,7,9,10],glacial:[0,3,5,7,10],balanced:[0,2,3,5,7,8,10]};
+  var actx=null;
+  function rri(r,n){return Math.floor(r()*n);}
+  function playTune(){
+    var sa=$('sa').value||'starweave',palA=pickPal(sa),kA=knobs(sa,palA);
+    var scale=SCALES[palA.mood]||SCALES.balanced;
+    if(actx){try{actx.close();}catch(e){}}
+    actx=new (window.AudioContext||window.webkitAudioContext)();
+    if(actx.resume)actx.resume();
+    var r=rng(sa,'music'),root=130.81*Math.pow(2,(rri(r,5)-2)/12),bpm=78+kA.turb*64,beat=60/bpm,seconds=8,type=kA.bright<0.5?'triangle':'sine';
+    function note(freq,start,dur,amp){var o=actx.createOscillator(),g=actx.createGain();o.type=type;o.frequency.value=freq;o.connect(g);g.connect(actx.destination);var t0=actx.currentTime+start;g.gain.setValueAtTime(0.0001,t0);g.gain.linearRampToValueAtTime(amp,t0+0.012);g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);o.start(t0);o.stop(t0+dur+0.03);}
+    var durs=[0.5,0.5,1,1,1,2],octs=[0,12,12,24],t=0;
+    while(t<seconds){var d=beat*durs[rri(r,durs.length)];if(r()<0.12){t+=d;continue;}var semis=scale[rri(r,scale.length)]+octs[rri(r,octs.length)];note(root*Math.pow(2,semis/12),t,d*0.92,0.16*(0.6+0.4*kA.bright));t+=d;}
+    t=0;while(t<seconds){note(root/2,t,beat*1.8,0.13);t+=beat*2;}
+  }
+  $('tune').addEventListener('click',playTune);
   $('dl').addEventListener('click',function(){var b=new Blob([lastSvg],{type:'image/svg+xml'});var u=URL.createObjectURL(b);var a=document.createElement('a');a.href=u;a.download='starweave-'+($('sa').value||'poster').replace(/[^a-z0-9]+/gi,'-').slice(0,40)+'.svg';a.click();URL.revokeObjectURL(u);});
   render();
 })();

@@ -93,6 +93,20 @@ class VariantAndLayerTests(unittest.TestCase):
         self.assertNotEqual(full, trimmed)
         self.assertLess(len(trimmed), len(full))
 
+    def test_filament_layer_grows_and_is_well_formed(self) -> None:
+        from starweave.options import RenderOptions
+        from starweave.scene import render_scene
+        from starweave.world import World
+
+        world = World.from_seed("emergence", "aurora")
+        world.features["filament"] = True  # force the emergent layer on
+        svg = render_scene(world, RenderOptions(width=800, height=520))
+        parse(svg)
+        self.assertIn("<path", svg)
+        again = World.from_seed("emergence", "aurora")
+        again.features["filament"] = True
+        self.assertEqual(svg, render_scene(again, RenderOptions(width=800, height=520)))
+
     def test_title_layer_can_be_hidden(self) -> None:
         with_title = render_poster("title probe")
         without = render_poster("title probe", show_title=False)
@@ -137,6 +151,7 @@ class CliTests(unittest.TestCase):
         self.assertIn("<!doctype html>", html)
         self.assertIn("starweave", html)
         self.assertIn("<script>", html)
+        self.assertIn("AudioContext", html)  # the in-browser sonification
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "explorer.html"
             self.assertEqual(run_cli(["seed", "--explorer", "--out", str(output)]), 0)

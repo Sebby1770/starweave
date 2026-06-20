@@ -45,6 +45,7 @@ _FEATURE_ODDS = {
     "horizon": 0.3,
     "rings": 0.7,
     "grid": 0.25,
+    "filament": 0.4,
 }
 
 
