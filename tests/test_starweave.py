@@ -93,6 +93,20 @@ class VariantAndLayerTests(unittest.TestCase):
         self.assertNotEqual(full, trimmed)
         self.assertLess(len(trimmed), len(full))
 
+    def test_attractor_layer_is_well_formed_and_deterministic(self) -> None:
+        from starweave.options import RenderOptions
+        from starweave.scene import render_scene
+        from starweave.world import World
+
+        world = World.from_seed("chaos theory", "synthwave")
+        world.features["attractor"] = True
+        svg = render_scene(world, RenderOptions(width=700, height=500))
+        parse(svg)
+        self.assertIn("<path", svg)
+        again = World.from_seed("chaos theory", "synthwave")
+        again.features["attractor"] = True
+        self.assertEqual(svg, render_scene(again, RenderOptions(width=700, height=500)))
+
     def test_filament_layer_grows_and_is_well_formed(self) -> None:
         from starweave.options import RenderOptions
         from starweave.scene import render_scene
@@ -143,6 +157,22 @@ class CliTests(unittest.TestCase):
     def test_cli_unknown_layer_is_an_error(self) -> None:
         with self.assertRaises(SystemExit):
             run_cli(["seed", "--only", "background,not-a-layer"])
+
+    def test_ascii_is_deterministic_and_rectangular(self) -> None:
+        from starweave.ascii_art import ascii_poster
+        from starweave.world import World
+
+        world = World.from_seed("ascii sky", "aurora")
+        art = ascii_poster(world, cols=60)
+        self.assertEqual(art, ascii_poster(World.from_seed("ascii sky", "aurora"), cols=60))
+        lines = art.split("\n")
+        self.assertIn("STARWEAVE", lines[0])
+        # Every grid row (between header and the seed footer) is exactly cols wide.
+        grid = lines[1:-1]
+        self.assertTrue(all(len(row) == 60 for row in grid))
+
+    def test_cli_ascii_runs(self) -> None:
+        self.assertEqual(run_cli(["seed", "--ascii", "--cols", "40"]), 0)
 
     def test_cli_explorer_writes_standalone_html(self) -> None:
         from starweave.webexport import explorer_html

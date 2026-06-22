@@ -163,6 +163,49 @@ class Galaxy(Layer):
 
 
 # --------------------------------------------------------------------------- #
+# Strange attractor — order out of chaos
+# --------------------------------------------------------------------------- #
+class Attractor(Layer):
+    """A De Jong strange attractor: iterate a chaotic map thousands of times and
+    plot where it lands. The four parameters come from the seed, so each phrase
+    settles into its own luminous, deterministic swirl — chaos that never
+    repeats yet always lands the same way for the same words."""
+
+    name = "attractor"
+    requires = "attractor"
+
+    def build(self, world: World, doc: SvgDoc, opts: RenderOptions) -> None:
+        rng = self.rng(world)
+        w, h = opts.width, opts.height
+        a = rng.uniform(-2.5, 2.5)
+        b = rng.uniform(-2.5, 2.5)
+        c = rng.uniform(-2.5, 2.5)
+        d = rng.uniform(-2.5, 2.5)
+        points = round(2600 + 2200 * world.density)
+
+        cx = w * rng.uniform(0.42, 0.58)
+        cy = h * rng.uniform(0.4, 0.55)
+        scale = min(w, h) * 0.42 / 2.2  # De Jong stays within ~[-2.2, 2.2]
+        color = rng.choice(world.palette.stars)
+
+        x = y = 0.0
+        segs = []
+        for _ in range(points):
+            nx = math.sin(a * y) - math.cos(b * x)
+            ny = math.sin(c * x) - math.cos(d * y)
+            x, y = nx, ny
+            # "M X Y h.01" with a round linecap draws a single faint dot — far
+            # more compact than thousands of <circle> elements.
+            segs.append(f"M{fmt(cx + x * scale)} {fmt(cy + y * scale)}h.01")
+
+        doc.add(
+            f'<path d="{"".join(segs)}" stroke="{color}" stroke-width="0.9" '
+            f'stroke-linecap="round" fill="none" '
+            f'opacity="{0.42 + 0.3 * world.brightness:.2f}" filter="{doc.url("glow")}" />'
+        )
+
+
+# --------------------------------------------------------------------------- #
 # Aurora band — a soft horizontal ribbon of light
 # --------------------------------------------------------------------------- #
 class AuroraBand(Layer):
@@ -586,6 +629,7 @@ DEFAULT_LAYERS: tuple[Layer, ...] = (
     Background(),
     Nebula(),
     Galaxy(),
+    Attractor(),
     AuroraBand(),
     Filament(),
     Grid(),

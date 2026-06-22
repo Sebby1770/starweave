@@ -46,6 +46,7 @@ _FEATURE_ODDS = {
     "rings": 0.7,
     "grid": 0.25,
     "filament": 0.4,
+    "attractor": 0.35,
 }
 
 

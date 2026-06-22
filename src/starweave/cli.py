@@ -55,6 +55,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Wrote {output} — open it in a browser")
         return 0
 
+    if args.ascii:
+        from .ascii_art import ascii_poster
+
+        world = World.from_seed(seed, args.palette, args.variant)
+        art = ascii_poster(world, cols=args.cols)
+        if args.out:
+            Path(args.out).write_text(art + "\n", encoding="utf-8")
+            print(f"Wrote {args.out}")
+        else:
+            print(art)
+        return 0
+
     if args.sonify:
         from .sonify import sonify
 
@@ -197,6 +209,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--explorer", action="store_true", help="Write a self-contained interactive web explorer (HTML).")
     parser.add_argument("--sonify", action="store_true", help="Render the seed as a deterministic WAV tune.")
     parser.add_argument("--seconds", type=float, default=12.0, help="Length of the --sonify tune.")
+    parser.add_argument("--ascii", action="store_true", help="Render the seed as terminal star-art.")
+    parser.add_argument("--cols", type=_positive_int, default=100, help="Width in characters for --ascii.")
     parser.add_argument("--describe", action="store_true", help="Print the seed's world as JSON and exit.")
     parser.add_argument("--open", action="store_true", help="Open the result after writing it.")
     parser.add_argument("--list-palettes", action="store_true", help="List palette names and exit.")
