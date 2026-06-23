@@ -44,6 +44,12 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(world.summary(), indent=2, sort_keys=True))
         return 0
 
+    if args.myth:
+        world = World.from_seed(seed, args.palette, args.variant)
+        print(world.name)
+        print(world.myth)
+        return 0
+
     try:
         layers = _select_layers(args.only, args.without)
     except ValueError as exc:
@@ -212,6 +218,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ascii", action="store_true", help="Render the seed as terminal star-art.")
     parser.add_argument("--cols", type=_positive_int, default=100, help="Width in characters for --ascii.")
     parser.add_argument("--describe", action="store_true", help="Print the seed's world as JSON and exit.")
+    parser.add_argument("--myth", action="store_true", help="Print the constellation's generated origin myth.")
     parser.add_argument("--open", action="store_true", help="Open the result after writing it.")
     parser.add_argument("--list-palettes", action="store_true", help="List palette names and exit.")
     parser.add_argument("--list-layers", action="store_true", help="List layer names and exit.")

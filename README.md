@@ -120,6 +120,7 @@ starweave "minimal"   --only background,stars,title
 | `--sonify [--seconds N]` | Render the seed as a deterministic WAV tune. |
 | `--ascii [--cols N]` | Render the seed as terminal star-art. |
 | `--describe` | Print the seed's world as JSON and exit. |
+| `--myth` | Print the constellation's generated origin myth. |
 | `--title` / `--no-title` | Override or hide the poster title. |
 | `--list-palettes` / `--list-layers` | Discoverability. |
 
@@ -158,6 +159,10 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 ```
 
 CI runs the suite on Python 3.10–3.13 and smoke-tests the CLI on every push.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

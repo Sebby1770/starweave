@@ -43,6 +43,14 @@ class WorldTests(unittest.TestCase):
         again = World.from_seed("feature seed", "midnight")
         self.assertEqual(world.features, again.features)
 
+    def test_myth_is_generated_deterministic_and_named(self) -> None:
+        world = World.from_seed("a myth", "aurora")
+        self.assertTrue(world.myth)
+        self.assertEqual(world.myth, World.from_seed("a myth", "aurora").myth)
+        self.assertNotEqual(world.myth, World.from_seed("other myth", "aurora").myth)
+        self.assertNotIn("the the ", world.myth.lower())  # no double article
+        self.assertEqual(world.summary()["myth"], world.myth)
+
     def test_summary_features_match_flags(self) -> None:
         world = World.from_seed("summary", "solar")
         listed = set(world.summary()["features"])

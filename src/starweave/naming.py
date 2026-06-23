@@ -45,3 +45,30 @@ def caption(rng: random.Random) -> str:
     """A short poetic line, lower-cased like a footnote."""
 
     return f"{rng.choice(_ADJECTIVES).lower()} things, {rng.choice(_VERBS)} over {rng.choice(_PLACES)}"
+
+
+_BEINGS = (
+    "a wandering cartographer", "the last lamplighter", "a forgetful god",
+    "twin navigators", "a clockwork heron", "the keeper of tides",
+    "a marooned astronomer", "an exiled queen", "a patient ferryman",
+)
+_DEEDS = (
+    "hung a lantern in the dark", "lost a coin among the stars",
+    "stitched a path back home", "counted every silence",
+    "traded a name for safe passage", "fell asleep mid-measurement",
+    "spilled a jar of mornings", "wound the sky one turn too far",
+)
+_ENDINGS = (
+    "and {name} has marked the spot ever since",
+    "so {name} still leans toward the horizon",
+    "which is why its lights never quite agree",
+    "and sailors have steered by it since",
+    "leaving {name} to drift, patient and bright",
+)
+
+
+def myth(rng: random.Random, name: str) -> str:
+    """A tiny deterministic origin legend for a named constellation."""
+
+    ending = rng.choice(_ENDINGS).format(name=name)
+    return f"They say {rng.choice(_BEINGS)} {rng.choice(_DEEDS)}, {ending}."

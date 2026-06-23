@@ -96,6 +96,7 @@ class World:
     features: dict[str, bool] = field(default_factory=dict)
     name: str = ""
     caption: str = ""
+    myth: str = ""
     reading: dict[str, float] = field(default_factory=dict)
 
     @classmethod
@@ -142,6 +143,7 @@ class World:
         name_rng = self.stream("name")
         self.name = naming.constellation_name(name_rng)
         self.caption = naming.caption(name_rng)
+        self.myth = naming.myth(self.stream("myth"), self.name)
 
     @classmethod
     def blended(cls, a: "World", b: "World", t: float) -> "World":
@@ -178,6 +180,7 @@ class World:
             "variant": self.variant,
             "mood": self.palette.mood,
             "name": self.name,
+            "myth": self.myth,
             "turbulence": round(self.turbulence, 3),
             "brightness": round(self.brightness, 3),
             "density": round(self.density, 3),

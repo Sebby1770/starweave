@@ -4,7 +4,7 @@ A seed phrase expands into a :class:`~starweave.world.World`, which a stack of
 :mod:`~starweave.layers` paints onto an :class:`~starweave.svg.SvgDoc`.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 from .options import RenderOptions
 from .render import render_poster
