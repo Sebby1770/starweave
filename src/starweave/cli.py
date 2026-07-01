@@ -55,6 +55,9 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         parser.error(str(exc))
 
+    if args.reproduce:
+        return _run_reproduce(args)
+
     if args.explorer:
         output = Path(args.out or "explorer.html")
         _write(output, explorer_html(), args.open)
@@ -140,6 +143,39 @@ def _run_gallery(args: argparse.Namespace, seed: str) -> int:
     return 0
 
 
+def _run_reproduce(args: argparse.Namespace) -> int:
+    """Regenerate a poster byte-for-byte from the metadata embedded in an SVG."""
+
+    import xml.dom.minidom as minidom
+
+    try:
+        doc = minidom.parse(args.reproduce)
+    except Exception as exc:  # noqa: BLE001 - report any parse failure cleanly
+        print(f"starweave: could not read {args.reproduce}: {exc}", file=sys.stderr)
+        return 2
+    nodes = doc.getElementsByTagName("starweave")
+    if not nodes:
+        print(f"starweave: no reproducibility metadata in {args.reproduce}", file=sys.stderr)
+        return 2
+    params = json.loads(nodes[0].getAttribute("data-params"))
+    world = params["world"]
+    width, height = params["size"]
+    svg = render_poster(
+        world["seed"],
+        width=width,
+        height=height,
+        stars=params["stars"],
+        planets=params["planets"],
+        palette=world["palette"],
+        variant=world["variant"],
+        animate=params.get("animated", False),
+    )
+    output = Path(args.out or "reproduced.svg")
+    _write(output, svg, args.open)
+    print(f"Reproduced {world['seed']!r} -> {output}")
+    return 0
+
+
 def _run_morph(args: argparse.Namespace, seed: str) -> int:
     width = args.width if args.width != DEFAULT_WIDTH else 480
     height = args.height if args.height != DEFAULT_HEIGHT else 300
@@ -219,6 +255,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cols", type=_positive_int, default=100, help="Width in characters for --ascii.")
     parser.add_argument("--describe", action="store_true", help="Print the seed's world as JSON and exit.")
     parser.add_argument("--myth", action="store_true", help="Print the constellation's generated origin myth.")
+    parser.add_argument("--reproduce", metavar="FILE", help="Regenerate a poster from the metadata embedded in an SVG.")
     parser.add_argument("--open", action="store_true", help="Open the result after writing it.")
     parser.add_argument("--list-palettes", action="store_true", help="List palette names and exit.")
     parser.add_argument("--list-layers", action="store_true", help="List layer names and exit.")

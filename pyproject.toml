@@ -30,3 +30,6 @@ starweave = "starweave.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+starweave = ["py.typed"]
+

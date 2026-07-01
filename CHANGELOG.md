@@ -4,6 +4,14 @@ All notable changes to Starweave are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `--reproduce FILE` — regenerate a poster byte-for-byte from the metadata
+  embedded in an existing SVG, closing the reproducibility loop.
+- A `py.typed` marker so downstream type checkers see the package's type hints.
+
 ## [0.3.0] — 2026-06-21
 
 The release that turns a one-shot poster script into a generative engine and a

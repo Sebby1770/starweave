@@ -121,6 +121,7 @@ starweave "minimal"   --only background,stars,title
 | `--ascii [--cols N]` | Render the seed as terminal star-art. |
 | `--describe` | Print the seed's world as JSON and exit. |
 | `--myth` | Print the constellation's generated origin myth. |
+| `--reproduce FILE` | Regenerate a poster byte-for-byte from an SVG's embedded metadata. |
 | `--title` / `--no-title` | Override or hide the poster title. |
 | `--list-palettes` / `--list-layers` | Discoverability. |
 

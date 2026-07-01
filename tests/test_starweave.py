@@ -70,6 +70,18 @@ class WellFormednessTests(unittest.TestCase):
         self.assertIn("<style>", animated)
         self.assertNotIn("@keyframes", static)
 
+    def test_reproduce_from_metadata_is_byte_identical(self) -> None:
+        original = render_poster(
+            "round trip", palette="auto", width=560, height=360,
+            stars=120, planets=4, animate=True, variant=2,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            src = Path(directory) / "orig.svg"
+            dst = Path(directory) / "repro.svg"
+            src.write_text(original, encoding="utf-8")
+            self.assertEqual(run_cli(["--reproduce", str(src), "--out", str(dst)]), 0)
+            self.assertEqual(dst.read_text(encoding="utf-8"), original)
+
     def test_metadata_roundtrips(self) -> None:
         svg = render_poster("metadata", palette="ember", width=500, height=320)
         doc = parse(svg)
