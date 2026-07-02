@@ -4,14 +4,6 @@ All notable changes to Starweave are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
-
-### Added
-
-- `--reproduce FILE` — regenerate a poster byte-for-byte from the metadata
-  embedded in an existing SVG, closing the reproducibility loop.
-- A `py.typed` marker so downstream type checkers see the package's type hints.
-
 ## [0.3.0] — 2026-06-21
 
 The release that turns a one-shot poster script into a generative engine and a
@@ -66,11 +58,17 @@ morphed, sonified, explored in the browser, or printed as terminal art.
   `web/explorer.html`): type a phrase, watch it generate, drag the morph slider,
   shuffle, **play the tune** (Web Audio), and save the SVG.
 
+**Reproducibility**
+
+- Every SVG embeds its generation parameters, and `--reproduce FILE` regenerates
+  a poster byte-for-byte from them — a poster is fully recoverable from itself.
+- A `py.typed` marker so downstream type checkers see the package's type hints.
+
 **Quality**
 
-- 45 unit tests (up from 5) covering determinism, well-formed XML across every
-  palette/variant, animation, metadata, layer selection, morph, semantics,
-  sonification, ASCII, and the explorer.
+- 46 unit tests (up from 5) covering determinism, well-formed XML across every
+  palette/variant, animation, metadata round-trip, layer selection, morph,
+  semantics, myths, sonification, ASCII, the attractor, and the explorer.
 - GitHub Actions CI on Python 3.10–3.13 with a CLI smoke test.
 
 ### Changed
