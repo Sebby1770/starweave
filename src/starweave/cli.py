@@ -15,13 +15,15 @@ from .options import (
     DEFAULT_PLANETS,
     DEFAULT_STARS,
     DEFAULT_WIDTH,
+    WALLPAPER_PRESETS,
     RenderOptions,
+    parse_wallpaper,
 )
 from .palette import CHOICES, PALETTES
 from .palette_preview import palette_preview_svg
 from .render import render_poster
 from .webexport import explorer_html
-from .world import World
+from .world import World, diff_worlds, format_diff
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -32,6 +34,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_batch_cmd(argv[1:])
     if argv and argv[0] == "palette-preview":
         return _run_palette_preview_cmd(argv[1:])
+    if argv and argv[0] == "diff":
+        return _run_diff_cmd(argv[1:])
 
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -47,7 +51,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{layer.name}{tag}")
         return 0
 
-    seed = args.seed or "starweave"
+    try:
+        seed = _resolve_seed(args)
+    except ValueError as exc:
+        parser.error(str(exc))
+
+    # Apply wallpaper size overrides before anything that uses width/height.
+    if args.wallpaper:
+        try:
+            args.width, args.height = parse_wallpaper(args.wallpaper)
+        except ValueError as exc:
+            parser.error(str(exc))
 
     if args.describe:
         world = World.from_seed(seed, args.palette, args.variant)
@@ -63,7 +77,8 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps(world.summary(), indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
-        print(f"Wrote {path}")
+        if not args.quiet:
+            print(f"Wrote {path}")
         # Dump-only unless the user also asked for a render path via --out
         # without another exclusive mode. If only --dump-world, stop here.
         if not args.out and not args.ascii and not args.sonify and not args.gallery \
@@ -88,7 +103,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.explorer:
         output = Path(args.out or "explorer.html")
         _write(output, explorer_html(), args.open)
-        print(f"Wrote {output} — open it in a browser")
+        if not args.quiet:
+            print(f"Wrote {output} — open it in a browser")
         return 0
 
     if args.ascii:
@@ -99,7 +115,8 @@ def main(argv: list[str] | None = None) -> int:
         art = ascii_poster(world, cols=cols)
         if args.out:
             Path(args.out).write_text(art + "\n", encoding="utf-8")
-            print(f"Wrote {args.out}")
+            if not args.quiet:
+                print(f"Wrote {args.out}")
         else:
             print(art)
         return 0
@@ -112,7 +129,8 @@ def main(argv: list[str] | None = None) -> int:
         if str(output.parent) not in ("", "."):
             output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(sonify(world, seconds=args.seconds))
-        print(f"Wrote {output} ({args.seconds:g}s, mood={world.palette.mood})")
+        if not args.quiet:
+            print(f"Wrote {output} ({args.seconds:g}s, mood={world.palette.mood})")
         return 0
 
     if args.morph is not None:
@@ -138,6 +156,7 @@ def main(argv: list[str] | None = None) -> int:
             show_title=not args.no_title,
             animate=args.animate,
             variant=args.variant,
+            stamp=args.stamp,
             layers=layers,
         )
     except ValueError as exc:
@@ -145,8 +164,36 @@ def main(argv: list[str] | None = None) -> int:
 
     output = Path(args.out or "starweave.svg")
     _write(output, svg, args.open)
-    print(f"Wrote {output}")
+    if not args.quiet:
+        print(f"Wrote {output}")
     return 0
+
+
+def _resolve_seed(args: argparse.Namespace) -> str:
+    """Resolve seed from positional arg, --seed-file, or default."""
+
+    file_seed: str | None = None
+    if getattr(args, "seed_file", None):
+        path = Path(args.seed_file)
+        if not path.is_file():
+            raise ValueError(f"seed file not found: {path}")
+        text = path.read_text(encoding="utf-8").strip()
+        if not text:
+            raise ValueError(f"seed file is empty: {path}")
+        # First non-empty line is the seed phrase.
+        for line in text.splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                file_seed = line
+                break
+        if not file_seed:
+            raise ValueError(f"seed file has no usable line: {path}")
+
+    if args.seed and file_seed:
+        raise ValueError("pass either a seed phrase or --seed-file, not both")
+    if file_seed:
+        return file_seed
+    return args.seed or "starweave"
 
 
 def _run_batch_cmd(argv: list[str]) -> int:
@@ -160,23 +207,34 @@ def _run_batch_cmd(argv: list[str]) -> int:
     parser.add_argument("--palette", choices=CHOICES, default="aurora")
     parser.add_argument("--width", type=_positive_int, default=DEFAULT_WIDTH)
     parser.add_argument("--height", type=_positive_int, default=DEFAULT_HEIGHT)
+    parser.add_argument("--wallpaper", metavar="SPEC", help="Size preset or WxH (overrides width/height).")
     parser.add_argument("--stars", type=_positive_int, default=DEFAULT_STARS)
     parser.add_argument("--planets", type=_positive_int, default=DEFAULT_PLANETS)
     parser.add_argument("--animate", action="store_true")
     parser.add_argument("--no-title", action="store_true")
     parser.add_argument("--title", help="Title override applied to every member.")
+    parser.add_argument("--stamp", action="store_true", help="Draw corner hash stamp on each poster.")
     parser.add_argument("--no-index", action="store_true", help="Skip writing index.html.")
+    parser.add_argument("--no-manifest", action="store_true", help="Skip writing manifest.json.")
     parser.add_argument("--quiet", action="store_true", help="Hide progress on stderr.")
     args = parser.parse_args(argv)
 
+    width, height = args.width, args.height
+    if args.wallpaper:
+        try:
+            width, height = parse_wallpaper(args.wallpaper)
+        except ValueError as exc:
+            parser.error(str(exc))
+
     opts = RenderOptions(
-        width=args.width,
-        height=args.height,
+        width=width,
+        height=height,
         stars=args.stars,
         planets=args.planets,
         title=args.title,
         show_title=not args.no_title,
         animate=args.animate,
+        stamp=args.stamp,
     )
     out_dir = Path(args.out)
     members = render_batch(
@@ -187,10 +245,34 @@ def _run_batch_cmd(argv: list[str]) -> int:
         opts=opts,
         progress=not args.quiet,
         index_html=not args.no_index,
+        manifest=not args.no_manifest,
     )
+    # Final summary always prints (quiet only hides the progress bar).
     print(f"Wrote {len(members)} posters to {out_dir}/")
     if not args.no_index:
         print(f"  index: {out_dir / 'index.html'}")
+    if not args.no_manifest:
+        print(f"  manifest: {out_dir / 'manifest.json'}")
+    return 0
+
+
+def _run_diff_cmd(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="starweave diff",
+        description="Compare World knobs and features between two seed phrases.",
+    )
+    parser.add_argument("seed_a", help="First seed phrase.")
+    parser.add_argument("seed_b", help="Second seed phrase.")
+    parser.add_argument("--palette", choices=CHOICES, default="aurora")
+    parser.add_argument("--variant-a", type=int, default=0, help="Variant for seed A.")
+    parser.add_argument("--variant-b", type=int, default=0, help="Variant for seed B.")
+    parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    args = parser.parse_args(argv)
+
+    a = World.from_seed(args.seed_a, args.palette, args.variant_a)
+    b = World.from_seed(args.seed_b, args.palette, args.variant_b)
+    result = diff_worlds(a, b)
+    print(format_diff(result, as_json=args.json))
     return 0
 
 
@@ -201,11 +283,13 @@ def _run_palette_preview_cmd(argv: list[str]) -> int:
     )
     parser.add_argument("--out", default="palettes.svg", help="Output SVG path (default palettes.svg).")
     parser.add_argument("--open", action="store_true", help="Open the result after writing.")
+    parser.add_argument("--quiet", action="store_true", help="Suppress status line.")
     args = parser.parse_args(argv)
     svg = palette_preview_svg()
     output = Path(args.out)
     _write(output, svg, args.open)
-    print(f"Wrote {output} ({len(PALETTES)} palettes)")
+    if not args.quiet:
+        print(f"Wrote {output} ({len(PALETTES)} palettes)")
     return 0
 
 
@@ -223,6 +307,7 @@ def _run_gallery(args: argparse.Namespace, seed: str) -> int:
         title=args.title,
         show_title=not args.no_title,
         animate=args.animate,
+        stamp=args.stamp,
     )
     try:
         cells = cells_for(
@@ -239,7 +324,8 @@ def _run_gallery(args: argparse.Namespace, seed: str) -> int:
     html = render_gallery(seed, cells)
     output = Path(args.out or "gallery.html")
     _write(output, html, args.open)
-    print(f"Wrote {output} ({len(cells)} posters)")
+    if not args.quiet:
+        print(f"Wrote {output} ({len(cells)} posters)")
     return 0
 
 
@@ -272,7 +358,8 @@ def _run_reproduce(args: argparse.Namespace) -> int:
     )
     output = Path(args.out or "reproduced.svg")
     _write(output, svg, args.open)
-    print(f"Reproduced {world['seed']!r} -> {output}")
+    if not args.quiet:
+        print(f"Reproduced {world['seed']!r} -> {output}")
     return 0
 
 
@@ -287,6 +374,7 @@ def _run_morph(args: argparse.Namespace, seed: str) -> int:
         title=args.title,
         show_title=not args.no_title,
         animate=args.animate,
+        stamp=args.stamp,
     )
     try:
         cells = morph_cells(seed, args.morph, frames=args.frames, palette=args.palette, opts=opts)
@@ -296,7 +384,8 @@ def _run_morph(args: argparse.Namespace, seed: str) -> int:
     html = render_morph(seed, args.morph, cells)
     output = Path(args.out or "morph.html")
     _write(output, html, args.open)
-    print(f"Wrote {output} ({len(cells)} frames: {seed!r} -> {args.morph!r})")
+    if not args.quiet:
+        print(f"Wrote {output} ({len(cells)} frames: {seed!r} -> {args.morph!r})")
     return 0
 
 
@@ -327,19 +416,27 @@ def _select_layers(only: str | None, without: str | None) -> tuple[Layer, ...]:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    presets = ", ".join(sorted(WALLPAPER_PRESETS))
     parser = argparse.ArgumentParser(
         prog="starweave",
         description="Generate deterministic SVG space posters from seed phrases.",
     )
     parser.add_argument("seed", nargs="?", help="Phrase used to generate the poster.")
+    parser.add_argument("--seed-file", metavar="PATH", help="Read seed phrase from a file (first non-empty, non-# line).")
     parser.add_argument("--out", help="Output path (.svg, or .html for galleries).")
     parser.add_argument("--width", type=_positive_int, default=DEFAULT_WIDTH, help="Poster width.")
     parser.add_argument("--height", type=_positive_int, default=DEFAULT_HEIGHT, help="Poster height.")
+    parser.add_argument(
+        "--wallpaper",
+        metavar="SPEC",
+        help=f"Wallpaper size: preset ({presets}) or WxH e.g. 1920x1080. Overrides --width/--height.",
+    )
     parser.add_argument("--stars", type=_positive_int, default=DEFAULT_STARS, help="Number of stars.")
     parser.add_argument("--planets", type=_positive_int, default=DEFAULT_PLANETS, help="Number of planets.")
     parser.add_argument("--palette", choices=CHOICES, default="aurora", help="Color palette ('auto' picks from the seed).")
     parser.add_argument("--variant", type=int, default=0, help="Alternate deterministic draw of the same seed.")
     parser.add_argument("--animate", action="store_true", help="Emit an animated SVG (twinkle/drift/orbit).")
+    parser.add_argument("--stamp", action="store_true", help="Draw a corner micro-label with a short content hash.")
     parser.add_argument("--only", help="Comma-separated layers to keep (e.g. background,stars,title).")
     parser.add_argument("--without", help="Comma-separated layers to drop.")
     parser.add_argument("--title", help="Title printed on the poster.")
@@ -359,7 +456,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--myth", action="store_true", help="Print the constellation's generated origin myth.")
     parser.add_argument("--reproduce", metavar="FILE", help="Regenerate a poster from the metadata embedded in an SVG.")
     parser.add_argument("--open", action="store_true", help="Open the result after writing it.")
-    parser.add_argument("--quiet", action="store_true", help="Hide progress output for galleries.")
+    parser.add_argument("--quiet", action="store_true", help="Suppress status lines (progress still uses --quiet for galleries/batch).")
     parser.add_argument("--list-palettes", action="store_true", help="List palette names and exit.")
     parser.add_argument("--list-layers", action="store_true", help="List layer names and exit.")
     return parser

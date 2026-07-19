@@ -6,6 +6,7 @@ reproducible from the base string and count alone.
 
 from __future__ import annotations
 
+import json
 import sys
 from dataclasses import dataclass
 from html import escape
@@ -22,6 +23,7 @@ class BatchMember:
     index: int
     path: Path
     world_name: str
+    palette: str = ""
 
 
 def family_seed(base: str, index: int) -> str:
@@ -37,10 +39,12 @@ def render_batch(
     opts: RenderOptions | None = None,
     progress: bool = True,
     index_html: bool = True,
+    manifest: bool = True,
 ) -> list[BatchMember]:
     """Write ``count`` SVG variants of ``base`` into ``out_dir``.
 
-    Seeds are ``base#0`` … ``base#{count-1}``. Optionally writes ``index.html``.
+    Seeds are ``base#0`` … ``base#{count-1}``. Optionally writes ``index.html``
+    and ``manifest.json`` (seed, path, palette, world name per member).
     """
 
     if count <= 0:
@@ -64,16 +68,29 @@ def render_batch(
             title=ro.title,
             show_title=ro.show_title,
             animate=ro.animate,
+            stamp=ro.stamp,
         )
         path.write_text(svg, encoding="utf-8")
         world = World.from_seed(seed, palette)
-        members.append(BatchMember(seed=seed, index=i, path=path, world_name=world.name))
+        members.append(
+            BatchMember(
+                seed=seed,
+                index=i,
+                path=path,
+                world_name=world.name,
+                palette=world.palette.name,
+            )
+        )
         if progress:
             _progress(i + 1, count)
 
     if index_html:
         (out_dir / "index.html").write_text(
             _batch_index_html(base, members), encoding="utf-8"
+        )
+    if manifest:
+        (out_dir / "manifest.json").write_text(
+            _batch_manifest(base, members, palette=palette), encoding="utf-8"
         )
     return members
 
@@ -85,6 +102,25 @@ def _progress(done: int, total: int) -> None:
     if done >= total:
         sys.stderr.write("\n")
     sys.stderr.flush()
+
+
+def _batch_manifest(base: str, members: list[BatchMember], *, palette: str) -> str:
+    payload = {
+        "base": base,
+        "count": len(members),
+        "palette": palette,
+        "members": [
+            {
+                "seed": m.seed,
+                "index": m.index,
+                "path": m.path.name,
+                "palette": m.palette,
+                "world_name": m.world_name,
+            }
+            for m in members
+        ],
+    }
+    return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
 
 def _batch_index_html(base: str, members: list[BatchMember]) -> str:

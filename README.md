@@ -7,8 +7,8 @@ seed, and you can regenerate it from the metadata baked into the file.
 ![Example poster](examples/sebby-launch.svg)
 
 It's pure standard-library Python at runtime (no dependencies), and it can emit
-static posters, **self-contained animated SVGs**, **seed families**, and **HTML
-contact-sheet galleries**.
+static posters, **self-contained animated SVGs**, **wallpaper-sized canvases**,
+**seed families** with manifests, and **HTML contact-sheet galleries**.
 
 ## The idea
 
@@ -21,20 +21,22 @@ stack of **Layers** then paints that world onto an SVG document:
  seed ── sha256 ──▶  World ────────────────▶  Scene (layer stack) ──▶  SVG
                     │ mood, density,          │ background, nebula,     │ static
                     │ turbulence,             │ clusters, blackhole,    │ animated
-                    │ features{galaxy,moon,   │ supernova, galaxy,      │ gallery
-                    │  blackhole,supernova…}  │ orbits, stars, planets, │ batch
-                    │ name "Sigma Lyrae"      │ moon, horizon, title
-                    └ stream("stars") …
+                    │ features{galaxy,moon,   │ wormhole, supernova,    │ gallery
+                    │  blackhole,wormhole,    │ galaxy, orbits, stars,  │ batch
+                    │  satellite,supernova…}  │ planets, satellite,     │ wallpaper
+                    │ name "Sigma Lyrae"      │ moon, horizon, title,
+                    └ stream("stars") …       │ stamp
 ```
 
 Two properties fall out of that design:
 
 - **Reproducible** — `(seed, palette, variant)` fully determines the poster.
-  The world summary and generation params are embedded in the SVG `<metadata>`.
+  The world summary, content hash stamp, and generation params are embedded in
+  the SVG `<metadata>`.
 - **Composable** — every layer draws from its *own* named RNG stream
   (`world.stream("stars")`), so adding, dropping, or reordering layers never
   changes another layer's output. The galaxy looks identical whether or not a
-  black hole is drawn.
+  wormhole is drawn.
 
 ## Quick start
 
@@ -56,6 +58,11 @@ starweave "late night code" --palette auto --out poster.svg --open
 # Animated SVG — twinkling stars, drifting nebulae, orbiting planets.
 starweave "midnight compiler" --palette synthwave --animate --out anim.svg
 
+# Desktop wallpaper sizes (presets or WxH).
+starweave "deep field" --wallpaper 4k --out wall-4k.svg
+starweave "deep field" --wallpaper 1920x1080 --out wall-hd.svg
+starweave "deep field" --wallpaper desktop --out wall.svg
+
 # Let the seed choose its own signature palette.
 starweave "tidal lock" --palette auto
 
@@ -65,8 +72,19 @@ starweave "deep field" --gallery 9 --out gallery.html --open
 # One poster per built-in palette, side by side.
 starweave "deep field" --gallery-palettes --out palettes.html
 
-# Seed family: 12 related posters (base#0 … base#11) + index.html
+# Seed family: 12 related posters (base#0 … base#11) + index.html + manifest.json
 starweave batch "deep field" --count 12 --out family/
+
+# Compare two seeds in World-space (knobs, features, reading).
+starweave diff "orbit coffee" "midnight compiler"
+starweave diff "orbit coffee" "midnight compiler" --json
+
+# Read the seed phrase from a file.
+echo "the long quiet between stars" > seed.txt
+starweave --seed-file seed.txt --out quiet.svg
+
+# Corner hash stamp + embedded content hash in metadata.
+starweave "catalog entry" --stamp --out stamped.svg
 
 # Export the world as JSON (no render), or dump + render together.
 starweave "orbit coffee" --dump-world world.json
@@ -87,18 +105,18 @@ starweave "the long quiet between stars" --sonify --seconds 12 --out song.wav
 # Terminal star-art (denser ramp; width via --ascii-width or --cols).
 starweave "the long quiet between stars" --ascii --ascii-width 90
 
-# Force or drop layers (blackhole, supernova, nebula_clusters, …).
+# Force or drop layers (wormhole, satellite, blackhole, …).
 starweave "singularity" --without comets,grid
-starweave "minimal" --only background,stars,blackhole,title
+starweave "minimal" --only background,stars,wormhole,title
 
 # Reproduce any poster from its embedded metadata.
 starweave --reproduce poster.svg --out again.svg
 ```
 
-Some seeds host a **black hole** (event horizon + photon ring + accretion disk),
-a **supernova remnant**, denser **nebula clusters**, a **strange attractor**, or
-an **L-system filament** — each on its own stream so the rest of the sky never
-jitters when a feature flips.
+Some seeds host a **wormhole** (concentric funnel rings into a dark throat), a
+**black hole**, a **satellite** docked near a planet, a **supernova remnant**,
+denser **nebula clusters**, a **strange attractor**, or an **L-system filament**
+— each on its own stream so the rest of the sky never jitters when a feature flips.
 
 A prebuilt explorer lives at [`web/explorer.html`](web/explorer.html). Inspect a
 seed with:
@@ -113,16 +131,19 @@ starweave "orbit coffee" --myth
 | Flag / command | Meaning |
 | --- | --- |
 | `seed` | Phrase used to generate the poster. |
+| `--seed-file PATH` | Read seed phrase from a file (first non-empty, non-`#` line). |
 | `--out PATH` | Output file (`.svg`, or `.html` for galleries). |
 | `--width` / `--height` | Canvas size (default 1440×900). |
+| `--wallpaper SPEC` | Size preset (`desktop`, `1080p`, `1440p`, `4k`) or `WxH`. |
 | `--stars` / `--planets` | Counts (the world scales density around these). |
 | `--palette NAME` | One of the built-ins, or `auto` to pick from the seed. |
 | `--variant N` | A different deterministic draw of the same seed. |
 | `--animate` | Emit an animated SVG (twinkle / drift / orbit). |
+| `--stamp` | Draw a corner micro-label with a short content hash. |
 | `--only A,B` / `--without A,B` | Include or exclude layers by name. |
 | `--gallery [N]` | HTML contact sheet of N seed variants (default 6). |
 | `--gallery-palettes` | Gallery with one poster per palette. |
-| `--quiet` | Hide gallery/batch progress on stderr. |
+| `--quiet` | Hide progress and “Wrote …” status lines. |
 | `--morph SEED_B [--frames N]` | Interpolate seed-space from the seed to `SEED_B`. |
 | `--explorer` | Write a self-contained interactive web explorer (HTML). |
 | `--sonify [--seconds N]` | Render the seed as a deterministic WAV tune. |
@@ -133,7 +154,8 @@ starweave "orbit coffee" --myth
 | `--reproduce FILE` | Regenerate a poster from an SVG's embedded metadata. |
 | `--title` / `--no-title` | Override or hide the poster title. |
 | `--list-palettes` / `--list-layers` | Discoverability. |
-| `batch BASE --count N --out DIR` | Seed family `BASE#0`…`BASE#N-1` + index HTML. |
+| `batch BASE --count N --out DIR` | Seed family `BASE#0`…`BASE#N-1` + index + manifest. |
+| `diff SEED_A SEED_B [--json]` | Compare World knobs / features between two seeds. |
 | `palette-preview --out FILE` | SVG swatch strip of every palette. |
 
 Ten palettes ship in the box: `aurora`, `ember`, `midnight`, `solar`, `rose`,
@@ -142,25 +164,29 @@ Ten palettes ship in the box: `aurora`, `ember`, `midnight`, `solar`, `rose`,
 ## Library use
 
 ```python
-from starweave import render_poster, World
+from starweave import render_poster, World, diff_worlds, parse_wallpaper
 
-svg = render_poster("late night code", palette="auto", animate=True)
+svg = render_poster("late night code", palette="auto", animate=True, stamp=True)
 
 world = World.from_seed("late night code", "auto")
 print(world.name, world.summary()["features"])
+
+w, h = parse_wallpaper("4k")
+diff = diff_worlds(World.from_seed("a"), World.from_seed("b"))
 ```
 
 ## Project layout
 
 ```
 src/starweave/
-  world.py           seed -> World (mood, knobs, features, name, RNG streams)
+  world.py           seed -> World (mood, knobs, features, name, RNG streams, diff)
   layers.py          composable Layer classes painted back-to-front
-  scene.py           World + layers -> SvgDoc
+  scene.py           World + layers -> SvgDoc (+ content hash stamp)
   svg.py             SVG document builder
+  options.py         RenderOptions + wallpaper presets
   palette.py         ten palettes + deterministic "auto"
   palette_preview.py swatch-strip SVG for all palettes
-  batch.py           seed-family rendering
+  batch.py           seed-family rendering + manifest.json
   naming.py          catalogue names, captions, myths
   gallery.py         many posters on one HTML page
   ascii_art.py       terminal star-art

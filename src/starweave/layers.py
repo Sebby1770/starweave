@@ -680,6 +680,7 @@ class Planets(Layer):
         cx0, cy0 = doc.shared.get("orbit_center", (w * 0.5, h * 0.5))  # type: ignore[assignment]
         items = [f'<g filter="{doc.url("glow")}">']
         rings_on = world.has("rings")
+        planet_positions: list[tuple[float, float, float]] = []
         for index in range(opts.planets):
             angle = rng.uniform(0, math.tau)
             distance_x = w * rng.uniform(0.12, 0.42)
@@ -724,7 +725,9 @@ class Planets(Layer):
                 )
             body.append("</g>")
             items.append("".join(body))
+            planet_positions.append((cx, cy, radius))
         items.append("</g>")
+        doc.shared["planet_positions"] = planet_positions
         doc.add("\n".join(items))
 
 
@@ -762,6 +765,183 @@ class Moon(Layer):
             parts.append(
                 f'<circle cx="{fmt(crx)}" cy="{fmt(cry)}" r="{fmt(cr)}" '
                 f'fill="{crater_color}" opacity="0.25" />'
+            )
+        parts.append("</g>")
+        doc.add("\n".join(parts))
+
+
+# --------------------------------------------------------------------------- #
+# Wormhole — concentric distorted rings funneling toward a vanishing point
+# --------------------------------------------------------------------------- #
+class Wormhole(Layer):
+    """Concentric, slightly distorted rings that spiral into a dark throat.
+
+    Entirely driven by the ``wormhole`` stream so other layers stay stable.
+    """
+
+    name = "wormhole"
+    requires = "wormhole"
+
+    def build(self, world: World, doc: SvgDoc, opts: RenderOptions) -> None:
+        rng = self.rng(world)
+        w, h = opts.width, opts.height
+        cx = w * rng.uniform(0.32, 0.68)
+        cy = h * rng.uniform(0.28, 0.62)
+        max_r = min(w, h) * rng.uniform(0.14, 0.28)
+        rings = rng.randint(7, 12)
+        accent = rng.choice(world.palette.accent)
+        hot = rng.choice(world.palette.stars)
+        cool = rng.choice(world.palette.nebula)
+        twist = rng.uniform(0.08, 0.22)
+        squash = rng.uniform(0.72, 0.95)
+
+        parts: list[str] = ['<g style="mix-blend-mode: screen">']
+        # Soft throat glow.
+        throat_id = doc.ref("whthroat")
+        doc.add_def(
+            f'<radialGradient id="{throat_id}" cx="50%" cy="50%" r="50%">'
+            f'<stop offset="0%" stop-color="#000000" stop-opacity="0.95" />'
+            f'<stop offset="35%" stop-color="{cool}" stop-opacity="0.25" />'
+            f'<stop offset="100%" stop-color="{accent}" stop-opacity="0" />'
+            f"</radialGradient>"
+        )
+        parts.append(
+            f'<ellipse cx="{fmt(cx)}" cy="{fmt(cy)}" '
+            f'rx="{fmt(max_r * 1.05)}" ry="{fmt(max_r * squash * 1.05)}" '
+            f'fill="url(#{throat_id})" opacity="0.9" />'
+        )
+
+        for i in range(rings):
+            t = (i + 1) / rings
+            # Funnel: outer rings large, inner rings collapse toward the throat.
+            rr = max_r * (0.12 + 0.88 * (1.0 - t) ** 0.85)
+            rot = twist * i * 28 + rng.uniform(-4, 4)
+            stroke = hot if i % 3 == 0 else (accent if i % 2 == 0 else cool)
+            op = 0.12 + 0.45 * t * (0.5 + 0.5 * world.brightness)
+            sw = max(0.6, (2.8 - 2.0 * t) * (0.7 + 0.3 * world.density))
+            # Mild radial distortion via dash pattern on alternate rings.
+            dash = ""
+            if i % 2 == 0:
+                dash = f' stroke-dasharray="{rng.uniform(3, 9):.1f} {rng.uniform(4, 14):.1f}"'
+            parts.append(
+                f'<ellipse cx="{fmt(cx)}" cy="{fmt(cy)}" '
+                f'rx="{fmt(rr)}" ry="{fmt(rr * squash)}" '
+                f'fill="none" stroke="{stroke}" stroke-width="{sw:.2f}" '
+                f'opacity="{op:.2f}" filter="{doc.url("glow")}"{dash} '
+                f'transform="rotate({fmt(rot)} {fmt(cx)} {fmt(cy)})" />'
+            )
+
+        # Event-throat disc.
+        core_r = max_r * rng.uniform(0.06, 0.11)
+        parts.append(
+            f'<ellipse cx="{fmt(cx)}" cy="{fmt(cy)}" '
+            f'rx="{fmt(core_r)}" ry="{fmt(core_r * squash)}" '
+            f'fill="#000000" opacity="0.96" />'
+        )
+        parts.append(
+            f'<ellipse cx="{fmt(cx)}" cy="{fmt(cy)}" '
+            f'rx="{fmt(core_r * 1.15)}" ry="{fmt(core_r * squash * 1.15)}" '
+            f'fill="none" stroke="{hot}" stroke-width="0.8" opacity="0.55" />'
+        )
+
+        if opts.animate:
+            dur = rng.uniform(40, 80)
+            parts.append(
+                f'<animateTransform attributeName="transform" type="rotate" '
+                f'from="0 {fmt(cx)} {fmt(cy)}" to="360 {fmt(cx)} {fmt(cy)}" '
+                f'dur="{dur:.0f}s" repeatCount="indefinite" additive="sum" />'
+            )
+        parts.append("</g>")
+        doc.add("\n".join(parts))
+        doc.shared["wormhole_center"] = (cx, cy, max_r)
+
+
+# --------------------------------------------------------------------------- #
+# Satellite — tiny craft / station near a planet
+# --------------------------------------------------------------------------- #
+class Satellite(Layer):
+    """A small orbiting craft or station parked near a planet.
+
+    Uses the ``satellite`` stream. Needs the planets layer to have placed at
+    least one body (``doc.shared["planet_positions"]``); otherwise skips.
+    """
+
+    name = "satellite"
+    requires = "satellite"
+
+    def build(self, world: World, doc: SvgDoc, opts: RenderOptions) -> None:
+        if opts.planets <= 0:
+            return
+        positions = doc.shared.get("planet_positions") or []
+        if not positions:
+            return
+        rng = self.rng(world)
+        # Anchor on one of the earlier planets (deterministic choice).
+        host = positions[rng.randrange(len(positions))]
+        px, py, pr = host  # type: ignore[misc]
+        angle = rng.uniform(0, math.tau)
+        dist = pr * rng.uniform(1.8, 3.2)
+        sx = px + math.cos(angle) * dist
+        sy = py + math.sin(angle) * dist
+        body_r = max(1.4, pr * rng.uniform(0.12, 0.22))
+        hull = rng.choice(world.palette.stars)
+        accent = rng.choice(world.palette.accent)
+        panel = rng.choice(world.palette.nebula)
+
+        parts: list[str] = [f'<g filter="{doc.url("glow")}">']
+        # Solar panels.
+        panel_w = body_r * 2.4
+        panel_h = body_r * 0.55
+        parts.append(
+            f'<rect x="{fmt(sx - panel_w - body_r * 0.2)}" y="{fmt(sy - panel_h / 2)}" '
+            f'width="{fmt(panel_w)}" height="{fmt(panel_h)}" '
+            f'fill="{panel}" opacity="0.75" rx="0.6" />'
+        )
+        parts.append(
+            f'<rect x="{fmt(sx + body_r * 0.2)}" y="{fmt(sy - panel_h / 2)}" '
+            f'width="{fmt(panel_w)}" height="{fmt(panel_h)}" '
+            f'fill="{panel}" opacity="0.75" rx="0.6" />'
+        )
+        # Central bus.
+        parts.append(
+            f'<rect x="{fmt(sx - body_r * 0.7)}" y="{fmt(sy - body_r * 0.55)}" '
+            f'width="{fmt(body_r * 1.4)}" height="{fmt(body_r * 1.1)}" '
+            f'fill="{hull}" opacity="0.95" rx="1" />'
+        )
+        # Antenna / dish.
+        parts.append(
+            f'<circle cx="{fmt(sx)}" cy="{fmt(sy - body_r * 0.95)}" r="{fmt(body_r * 0.35)}" '
+            f'fill="none" stroke="{accent}" stroke-width="0.9" opacity="0.85" />'
+        )
+        parts.append(
+            f'<line x1="{fmt(sx)}" y1="{fmt(sy - body_r * 0.55)}" '
+            f'x2="{fmt(sx)}" y2="{fmt(sy - body_r * 0.95)}" '
+            f'stroke="{accent}" stroke-width="0.8" opacity="0.8" />'
+        )
+        # Tiny beacon light.
+        parts.append(
+            f'<circle cx="{fmt(sx + body_r * 0.35)}" cy="{fmt(sy)}" r="{fmt(max(0.8, body_r * 0.18))}" '
+            f'fill="{accent}" opacity="0.95" />'
+        )
+
+        # Thin local orbit arc around the host planet.
+        orbit_rx = dist * rng.uniform(0.95, 1.05)
+        orbit_ry = dist * rng.uniform(0.55, 0.85)
+        tilt = math.degrees(angle) + rng.uniform(-20, 20)
+        parts.append(
+            f'<ellipse cx="{fmt(px)}" cy="{fmt(py)}" '
+            f'rx="{fmt(orbit_rx)}" ry="{fmt(orbit_ry)}" '
+            f'fill="none" stroke="{accent}" stroke-width="0.6" opacity="0.28" '
+            f'stroke-dasharray="2 6" '
+            f'transform="rotate({fmt(tilt)} {fmt(px)} {fmt(py)})" />'
+        )
+
+        if opts.animate:
+            dur = rng.uniform(18, 40)
+            parts.append(
+                f'<animateTransform attributeName="transform" type="rotate" '
+                f'from="0 {fmt(px)} {fmt(py)}" to="360 {fmt(px)} {fmt(py)}" '
+                f'dur="{dur:.0f}s" repeatCount="indefinite" additive="sum" />'
             )
         parts.append("</g>")
         doc.add("\n".join(parts))
@@ -825,12 +1005,44 @@ class Title(Layer):
         )
 
 
+# --------------------------------------------------------------------------- #
+# Hash stamp — optional corner micro-label
+# --------------------------------------------------------------------------- #
+class Stamp(Layer):
+    """Tiny corner hash label; only paints when ``opts.stamp`` is true.
+
+    The stamp string itself is computed in the scene (content hash of seed +
+    params) and stored on ``doc.shared["stamp"]`` before layers run, or falls
+    back to a short seed digest.
+    """
+
+    name = "stamp"
+
+    def build(self, world: World, doc: SvgDoc, opts: RenderOptions) -> None:
+        if not opts.stamp:
+            return
+        stamp = doc.shared.get("stamp") or world.seed[:8]
+        w, h = opts.width, opts.height
+        accent = world.palette.accent[-1]
+        size = max(8, min(w, h) * 0.012)
+        x = w - max(16, w * 0.02)
+        y = h - max(12, h * 0.018)
+        doc.add(
+            f'<g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" '
+            f'text-anchor="end" opacity="0.45">'
+            f'<text x="{fmt(x)}" y="{fmt(y)}" fill="{accent}" '
+            f'font-size="{fmt(size)}" letter-spacing="1">{esc(str(stamp)[:16])}</text>'
+            f"</g>"
+        )
+
+
 #: Layers in paint order (back to front). Conditional layers self-skip.
 DEFAULT_LAYERS: tuple[Layer, ...] = (
     Background(),
     Nebula(),
     NebulaClusters(),
     Blackhole(),
+    Wormhole(),
     Supernova(),
     Galaxy(),
     Attractor(),
@@ -842,9 +1054,11 @@ DEFAULT_LAYERS: tuple[Layer, ...] = (
     Constellations(),
     Comets(),
     Planets(),
+    Satellite(),
     Moon(),
     Horizon(),
     Title(),
+    Stamp(),
 )
 
 #: Lookup by name, for the ``--only`` / ``--without`` CLI flags.
