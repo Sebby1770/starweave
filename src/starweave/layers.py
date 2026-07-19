@@ -102,6 +102,207 @@ class Nebula(Layer):
 
 
 # --------------------------------------------------------------------------- #
+# Nebula clusters — tighter packs of overlapping cloudlets
+# --------------------------------------------------------------------------- #
+class NebulaClusters(Layer):
+    """Dense sub-clusters of nebula blobs, each pack sharing a local centre.
+
+    Uses its own RNG stream (``nebula_clusters``) so the base nebula wash is
+    unchanged whether this layer is present or not.
+    """
+
+    name = "nebula_clusters"
+    requires = "nebula_clusters"
+
+    def build(self, world: World, doc: SvgDoc, opts: RenderOptions) -> None:
+        rng = self.rng(world)
+        w, h = opts.width, opts.height
+        packs = rng.randint(2, 4)
+        shapes: list[str] = []
+        for _ in range(packs):
+            px = rng.uniform(0.1 * w, 0.9 * w)
+            py = rng.uniform(0.1 * h, 0.9 * h)
+            members = rng.randint(3, 6)
+            base_color = rng.choice(world.palette.nebula)
+            for _ in range(members):
+                cx = px + rng.uniform(-0.08 * w, 0.08 * w)
+                cy = py + rng.uniform(-0.08 * h, 0.08 * h)
+                rx = rng.uniform(w * 0.03, w * 0.09)
+                ry = rng.uniform(h * 0.025, h * 0.08)
+                color = base_color if rng.random() < 0.7 else rng.choice(world.palette.nebula)
+                opacity = rng.uniform(0.08, 0.16 + 0.1 * world.turbulence)
+                rotation = rng.uniform(0, 180)
+                shapes.append(
+                    f'<ellipse cx="{fmt(cx)}" cy="{fmt(cy)}" rx="{fmt(rx)}" ry="{fmt(ry)}" '
+                    f'fill="{color}" opacity="{opacity:.2f}" filter="{doc.url("soft")}" '
+                    f'transform="rotate({fmt(rotation)} {fmt(cx)} {fmt(cy)})" />'
+                )
+        doc.add(
+            '<g style="mix-blend-mode: screen">\n' + "\n".join(shapes) + "\n</g>"
+        )
+
+
+# --------------------------------------------------------------------------- #
+# Black hole — event horizon + accretion disk + photon ring
+# --------------------------------------------------------------------------- #
+class Blackhole(Layer):
+    """A silhouette event horizon ringed by a glowing photon shell and a
+    tilted accretion disk. Entirely driven by the ``blackhole`` stream."""
+
+    name = "blackhole"
+    requires = "blackhole"
+
+    def build(self, world: World, doc: SvgDoc, opts: RenderOptions) -> None:
+        rng = self.rng(world)
+        w, h = opts.width, opts.height
+        cx = w * rng.uniform(0.28, 0.72)
+        cy = h * rng.uniform(0.28, 0.65)
+        r = min(w, h) * rng.uniform(0.045, 0.09)
+        tilt = rng.uniform(-28, 28)
+        disk_color = rng.choice(world.palette.accent)
+        hot = rng.choice(world.palette.stars)
+        cool = rng.choice(world.palette.nebula)
+
+        # Soft ambient glow behind the whole system.
+        glow_id = doc.ref("bhglow")
+        doc.add_def(
+            f'<radialGradient id="{glow_id}" cx="50%" cy="50%" r="50%">'
+            f'<stop offset="0%" stop-color="{hot}" stop-opacity="0.55" />'
+            f'<stop offset="55%" stop-color="{disk_color}" stop-opacity="0.18" />'
+            f'<stop offset="100%" stop-color="{disk_color}" stop-opacity="0" />'
+            f"</radialGradient>"
+        )
+        parts: list[str] = [f'<g transform="rotate({fmt(tilt)} {fmt(cx)} {fmt(cy)})">']
+
+        # Ambient glow.
+        parts.append(
+            f'<circle cx="{fmt(cx)}" cy="{fmt(cy)}" r="{fmt(r * 3.2)}" '
+            f'fill="url(#{glow_id})" opacity="0.85" />'
+        )
+
+        # Accretion disk — outer soft ellipse + inner brighter band.
+        parts.append(
+            f'<ellipse cx="{fmt(cx)}" cy="{fmt(cy)}" rx="{fmt(r * 2.8)}" ry="{fmt(r * 0.55)}" '
+            f'fill="{disk_color}" opacity="0.22" filter="{doc.url("soft")}" />'
+        )
+        parts.append(
+            f'<ellipse cx="{fmt(cx)}" cy="{fmt(cy)}" rx="{fmt(r * 2.15)}" ry="{fmt(r * 0.38)}" '
+            f'fill="none" stroke="{hot}" stroke-width="{max(2.0, r * 0.18):.1f}" '
+            f'opacity="0.55" filter="{doc.url("glow")}" />'
+        )
+        # Doppler-hot crescent on one side of the disk.
+        parts.append(
+            f'<ellipse cx="{fmt(cx + r * 0.9)}" cy="{fmt(cy)}" '
+            f'rx="{fmt(r * 0.7)}" ry="{fmt(r * 0.22)}" '
+            f'fill="{hot}" opacity="0.35" filter="{doc.url("soft")}" />'
+        )
+        parts.append(
+            f'<ellipse cx="{fmt(cx - r * 0.85)}" cy="{fmt(cy)}" '
+            f'rx="{fmt(r * 0.55)}" ry="{fmt(r * 0.18)}" '
+            f'fill="{cool}" opacity="0.2" filter="{doc.url("soft")}" />'
+        )
+
+        # Photon ring — thin luminous shell just outside the horizon.
+        parts.append(
+            f'<circle cx="{fmt(cx)}" cy="{fmt(cy)}" r="{fmt(r * 1.12)}" '
+            f'fill="none" stroke="{hot}" stroke-width="{max(1.4, r * 0.12):.1f}" '
+            f'opacity="0.9" filter="{doc.url("glow")}" />'
+        )
+        parts.append(
+            f'<circle cx="{fmt(cx)}" cy="{fmt(cy)}" r="{fmt(r * 1.05)}" '
+            f'fill="none" stroke="{disk_color}" stroke-width="{max(0.8, r * 0.06):.1f}" '
+            f'opacity="0.65" />'
+        )
+
+        # Event horizon — pure black silhouette.
+        parts.append(
+            f'<circle cx="{fmt(cx)}" cy="{fmt(cy)}" r="{fmt(r)}" '
+            f'fill="#000000" opacity="0.98" />'
+        )
+        # Faint lensing rim on the horizon edge.
+        parts.append(
+            f'<circle cx="{fmt(cx)}" cy="{fmt(cy)}" r="{fmt(r)}" '
+            f'fill="none" stroke="{hot}" stroke-width="0.6" opacity="0.25" />'
+        )
+
+        spin = ""
+        if opts.animate:
+            dur = rng.uniform(28, 55)
+            spin = (
+                f'<animateTransform attributeName="transform" type="rotate" '
+                f'from="0 {fmt(cx)} {fmt(cy)}" to="360 {fmt(cx)} {fmt(cy)}" '
+                f'dur="{dur:.0f}s" repeatCount="indefinite" additive="sum" />'
+            )
+        parts.append(spin)
+        parts.append("</g>")
+        doc.add("\n".join(parts))
+        doc.shared["blackhole_center"] = (cx, cy, r)
+
+
+# --------------------------------------------------------------------------- #
+# Supernova remnant — expanding shell of glowing arcs
+# --------------------------------------------------------------------------- #
+class Supernova(Layer):
+    """A supernova remnant: concentric faint arcs and filament wisps around a
+    bright core. Driven solely by the ``supernova`` stream."""
+
+    name = "supernova"
+    requires = "supernova"
+
+    def build(self, world: World, doc: SvgDoc, opts: RenderOptions) -> None:
+        rng = self.rng(world)
+        w, h = opts.width, opts.height
+        cx = w * rng.uniform(0.2, 0.8)
+        cy = h * rng.uniform(0.15, 0.75)
+        base_r = min(w, h) * rng.uniform(0.08, 0.18)
+        color = rng.choice(world.palette.nebula)
+        accent = rng.choice(world.palette.accent)
+        hot = rng.choice(world.palette.stars)
+
+        parts: list[str] = ['<g style="mix-blend-mode: screen">']
+        # Soft remnant core wash.
+        parts.append(
+            f'<circle cx="{fmt(cx)}" cy="{fmt(cy)}" r="{fmt(base_r * 0.45)}" '
+            f'fill="{color}" opacity="0.14" filter="{doc.url("soft")}" />'
+        )
+        # Concentric remnant shells.
+        shells = rng.randint(2, 4)
+        for i in range(shells):
+            rr = base_r * (0.55 + 0.35 * i + rng.uniform(-0.05, 0.05))
+            op = 0.18 + 0.08 * world.brightness - i * 0.03
+            stroke = accent if i % 2 == 0 else color
+            dash = f"{rng.uniform(6, 18):.1f} {rng.uniform(10, 28):.1f}"
+            parts.append(
+                f'<circle cx="{fmt(cx)}" cy="{fmt(cy)}" r="{fmt(rr)}" '
+                f'fill="none" stroke="{stroke}" stroke-width="{rng.uniform(1.2, 2.8):.1f}" '
+                f'opacity="{max(0.06, op):.2f}" stroke-dasharray="{dash}" '
+                f'filter="{doc.url("glow")}" />'
+            )
+        # Arc fragments / filament wisps.
+        arcs = rng.randint(3, 6)
+        for _ in range(arcs):
+            start = rng.uniform(0, math.tau)
+            sweep = rng.uniform(0.4, 1.4)
+            rr = base_r * rng.uniform(0.5, 1.25)
+            x1 = cx + math.cos(start) * rr
+            y1 = cy + math.sin(start) * rr
+            x2 = cx + math.cos(start + sweep) * rr
+            y2 = cy + math.sin(start + sweep) * rr
+            # Approximate arc with a quadratic bezier through the mid angle.
+            mid = start + sweep / 2
+            mx = cx + math.cos(mid) * rr * 1.08
+            my = cy + math.sin(mid) * rr * 1.08
+            parts.append(
+                f'<path d="M {fmt(x1)} {fmt(y1)} Q {fmt(mx)} {fmt(my)} {fmt(x2)} {fmt(y2)}" '
+                f'fill="none" stroke="{hot}" stroke-width="{rng.uniform(0.8, 1.8):.1f}" '
+                f'opacity="{rng.uniform(0.2, 0.45):.2f}" stroke-linecap="round" '
+                f'filter="{doc.url("glow")}" />'
+            )
+        parts.append("</g>")
+        doc.add("\n".join(parts))
+
+
+# --------------------------------------------------------------------------- #
 # Galaxy — a logarithmic spiral of faint stars
 # --------------------------------------------------------------------------- #
 class Galaxy(Layer):
@@ -628,6 +829,9 @@ class Title(Layer):
 DEFAULT_LAYERS: tuple[Layer, ...] = (
     Background(),
     Nebula(),
+    NebulaClusters(),
+    Blackhole(),
+    Supernova(),
     Galaxy(),
     Attractor(),
     AuroraBand(),

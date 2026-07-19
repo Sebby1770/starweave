@@ -6,6 +6,7 @@ import sys
 import webbrowser
 from pathlib import Path
 
+from .batch import render_batch
 from .gallery import cells_for, render_gallery
 from .morph import morph_cells, render_morph
 from .layers import DEFAULT_LAYERS, LAYERS_BY_NAME, Layer
@@ -17,12 +18,21 @@ from .options import (
     RenderOptions,
 )
 from .palette import CHOICES, PALETTES
+from .palette_preview import palette_preview_svg
 from .render import render_poster
 from .webexport import explorer_html
 from .world import World
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+
+    # Subcommands live alongside the classic flat CLI.
+    if argv and argv[0] == "batch":
+        return _run_batch_cmd(argv[1:])
+    if argv and argv[0] == "palette-preview":
+        return _run_palette_preview_cmd(argv[1:])
+
     parser = _build_parser()
     args = parser.parse_args(argv)
 
@@ -43,6 +53,23 @@ def main(argv: list[str] | None = None) -> int:
         world = World.from_seed(seed, args.palette, args.variant)
         print(json.dumps(world.summary(), indent=2, sort_keys=True))
         return 0
+
+    if args.dump_world:
+        world = World.from_seed(seed, args.palette, args.variant)
+        path = Path(args.dump_world)
+        if str(path.parent) not in ("", "."):
+            path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(world.summary(), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(f"Wrote {path}")
+        # Dump-only unless the user also asked for a render path via --out
+        # without another exclusive mode. If only --dump-world, stop here.
+        if not args.out and not args.ascii and not args.sonify and not args.gallery \
+                and args.gallery is None and not args.gallery_palettes \
+                and args.morph is None and not args.explorer and not args.reproduce:
+            return 0
 
     if args.myth:
         world = World.from_seed(seed, args.palette, args.variant)
@@ -68,7 +95,8 @@ def main(argv: list[str] | None = None) -> int:
         from .ascii_art import ascii_poster
 
         world = World.from_seed(seed, args.palette, args.variant)
-        art = ascii_poster(world, cols=args.cols)
+        cols = args.ascii_width if args.ascii_width is not None else args.cols
+        art = ascii_poster(world, cols=cols)
         if args.out:
             Path(args.out).write_text(art + "\n", encoding="utf-8")
             print(f"Wrote {args.out}")
@@ -93,6 +121,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.gallery is not None or args.gallery_palettes:
         return _run_gallery(args, seed)
 
+    # If user only requested dump-world (and maybe --out for the dump itself was
+    # not set but dump already written), avoid rendering unless they want SVG.
+    if args.dump_world and args.out is None:
+        return 0
+
     try:
         svg = render_poster(
             seed,
@@ -116,6 +149,66 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def _run_batch_cmd(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="starweave batch",
+        description="Render a seed family: base#0 … base#N-1 into a directory.",
+    )
+    parser.add_argument("base", help="Base seed phrase for the family.")
+    parser.add_argument("--count", type=_positive_int, default=12, help="Number of family members (default 12).")
+    parser.add_argument("--out", required=True, help="Output directory for the family.")
+    parser.add_argument("--palette", choices=CHOICES, default="aurora")
+    parser.add_argument("--width", type=_positive_int, default=DEFAULT_WIDTH)
+    parser.add_argument("--height", type=_positive_int, default=DEFAULT_HEIGHT)
+    parser.add_argument("--stars", type=_positive_int, default=DEFAULT_STARS)
+    parser.add_argument("--planets", type=_positive_int, default=DEFAULT_PLANETS)
+    parser.add_argument("--animate", action="store_true")
+    parser.add_argument("--no-title", action="store_true")
+    parser.add_argument("--title", help="Title override applied to every member.")
+    parser.add_argument("--no-index", action="store_true", help="Skip writing index.html.")
+    parser.add_argument("--quiet", action="store_true", help="Hide progress on stderr.")
+    args = parser.parse_args(argv)
+
+    opts = RenderOptions(
+        width=args.width,
+        height=args.height,
+        stars=args.stars,
+        planets=args.planets,
+        title=args.title,
+        show_title=not args.no_title,
+        animate=args.animate,
+    )
+    out_dir = Path(args.out)
+    members = render_batch(
+        args.base,
+        args.count,
+        out_dir,
+        palette=args.palette,
+        opts=opts,
+        progress=not args.quiet,
+        index_html=not args.no_index,
+    )
+    print(f"Wrote {len(members)} posters to {out_dir}/")
+    if not args.no_index:
+        print(f"  index: {out_dir / 'index.html'}")
+    return 0
+
+
+def _run_palette_preview_cmd(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="starweave palette-preview",
+        description="Write a small SVG swatch strip of every built-in palette.",
+    )
+    parser.add_argument("--out", default="palettes.svg", help="Output SVG path (default palettes.svg).")
+    parser.add_argument("--open", action="store_true", help="Open the result after writing.")
+    args = parser.parse_args(argv)
+    svg = palette_preview_svg()
+    output = Path(args.out)
+    _write(output, svg, args.open)
+    print(f"Wrote {output} ({len(PALETTES)} palettes)")
+    return 0
+
+
 def _run_gallery(args: argparse.Namespace, seed: str) -> int:
     mode = "palettes" if args.gallery_palettes else "variants"
     count = args.gallery if args.gallery is not None else 6
@@ -132,7 +225,14 @@ def _run_gallery(args: argparse.Namespace, seed: str) -> int:
         animate=args.animate,
     )
     try:
-        cells = cells_for(seed, mode=mode, count=count, opts=opts, palette=args.palette)
+        cells = cells_for(
+            seed,
+            mode=mode,
+            count=count,
+            opts=opts,
+            palette=args.palette,
+            progress=not getattr(args, "quiet", False),
+        )
     except ValueError as exc:
         print(f"starweave: {exc}", file=sys.stderr)
         return 2
@@ -252,11 +352,14 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sonify", action="store_true", help="Render the seed as a deterministic WAV tune.")
     parser.add_argument("--seconds", type=float, default=12.0, help="Length of the --sonify tune.")
     parser.add_argument("--ascii", action="store_true", help="Render the seed as terminal star-art.")
-    parser.add_argument("--cols", type=_positive_int, default=100, help="Width in characters for --ascii.")
+    parser.add_argument("--cols", type=_positive_int, default=100, help="Width in characters for --ascii (alias of --ascii-width).")
+    parser.add_argument("--ascii-width", type=_positive_int, default=None, metavar="N", help="Width in characters for --ascii.")
     parser.add_argument("--describe", action="store_true", help="Print the seed's world as JSON and exit.")
+    parser.add_argument("--dump-world", metavar="FILE", help="Write the seed's world as JSON to FILE (no render unless --out is also set).")
     parser.add_argument("--myth", action="store_true", help="Print the constellation's generated origin myth.")
     parser.add_argument("--reproduce", metavar="FILE", help="Regenerate a poster from the metadata embedded in an SVG.")
     parser.add_argument("--open", action="store_true", help="Open the result after writing it.")
+    parser.add_argument("--quiet", action="store_true", help="Hide progress output for galleries.")
     parser.add_argument("--list-palettes", action="store_true", help="List palette names and exit.")
     parser.add_argument("--list-layers", action="store_true", help="List layer names and exit.")
     return parser

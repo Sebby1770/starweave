@@ -12,7 +12,8 @@ import math
 from .world import World
 
 #: Intensity ramp from empty space to a bright star (ASCII-only for any terminal).
-_RAMP = " .:-=+*#%@"
+#: Slightly denser than the classic 10-step ramp so mid-tones read better.
+_RAMP = " .'`^\",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$"
 
 
 def ascii_poster(world: World, cols: int = 100, rows: int | None = None) -> str:
@@ -54,6 +55,9 @@ def ascii_poster(world: World, cols: int = 100, rows: int | None = None) -> str:
     if world.has("moon"):
         mx, my = planets.randrange(cols), planets.randrange(max(1, rows // 3))
         overrides[(my, mx)] = "@"
+    if world.has("blackhole"):
+        bx, by = planets.randrange(cols), planets.randrange(rows)
+        overrides[(by, bx)] = "o"
 
     lines = []
     for y in range(rows):
