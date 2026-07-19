@@ -45,6 +45,7 @@ def render_poster(
     show_title: bool = True,
     animate: bool = False,
     variant: int = 0,
+    stamp: bool = False,
     layers: tuple[Layer, ...] = DEFAULT_LAYERS,
 ) -> str:
     """Return a deterministic SVG poster for ``seed``.
@@ -52,6 +53,7 @@ def render_poster(
     ``palette`` may be ``"auto"`` to pick one from the seed. ``variant`` shifts
     the whole world to a different (still deterministic) draw of the same seed.
     ``animate=True`` emits a self-contained animated SVG (twinkle/drift/orbit).
+    ``stamp=True`` draws a corner micro-label with a short content hash.
     """
 
     _validate_positive("width", width)
@@ -68,5 +70,6 @@ def render_poster(
         title=title,
         show_title=show_title,
         animate=animate,
+        stamp=stamp,
     )
     return render_scene(world, opts, layers)

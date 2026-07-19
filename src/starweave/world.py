@@ -52,6 +52,8 @@ _FEATURE_ODDS = {
     "blackhole": 0.22,
     "supernova": 0.28,
     "nebula_clusters": 0.32,
+    "wormhole": 0.24,
+    "satellite": 0.45,
 }
 
 
@@ -192,3 +194,91 @@ class World:
             "reading": self.reading,
             "features": [k for k, v in self.features.items() if v],
         }
+
+
+def diff_worlds(a: World, b: World) -> dict[str, object]:
+    """Return which World knobs, features, and labels differ between two worlds.
+
+    Suitable for JSON output or pretty-printing via :func:`format_diff`.
+    """
+
+    sa, sb = a.summary(), b.summary()
+    knobs = ("turbulence", "brightness", "density", "mood", "palette", "variant", "name")
+    knob_diffs: dict[str, dict[str, object]] = {}
+    for key in knobs:
+        if sa.get(key) != sb.get(key):
+            knob_diffs[key] = {"a": sa.get(key), "b": sb.get(key)}
+
+    # Reading sub-keys (semantic letter stats).
+    reading_diffs: dict[str, dict[str, object]] = {}
+    ra = sa.get("reading") or {}
+    rb = sb.get("reading") or {}
+    if isinstance(ra, dict) and isinstance(rb, dict):
+        for key in sorted(set(ra) | set(rb)):
+            if ra.get(key) != rb.get(key):
+                reading_diffs[key] = {"a": ra.get(key), "b": rb.get(key)}
+
+    fa = set(sa.get("features") or [])  # type: ignore[arg-type]
+    fb = set(sb.get("features") or [])  # type: ignore[arg-type]
+    features = {
+        "only_a": sorted(fa - fb),
+        "only_b": sorted(fb - fa),
+        "shared": sorted(fa & fb),
+    }
+
+    return {
+        "seed_a": a.seed,
+        "seed_b": b.seed,
+        "identical": not knob_diffs and not reading_diffs and not features["only_a"] and not features["only_b"],
+        "knobs": knob_diffs,
+        "reading": reading_diffs,
+        "features": features,
+        "myth_differs": sa.get("myth") != sb.get("myth"),
+        "caption_differs": a.caption != b.caption,
+    }
+
+
+def format_diff(diff: dict[str, object], *, as_json: bool = False) -> str:
+    """Pretty-print a :func:`diff_worlds` result as text or JSON."""
+
+    if as_json:
+        import json
+
+        return json.dumps(diff, indent=2, sort_keys=True)
+
+    lines: list[str] = [
+        f"seed a: {diff['seed_a']!r}",
+        f"seed b: {diff['seed_b']!r}",
+    ]
+    if diff.get("identical"):
+        lines.append("identical: yes (same knobs, features, reading)")
+        return "\n".join(lines)
+
+    lines.append("identical: no")
+    knobs = diff.get("knobs") or {}
+    if isinstance(knobs, dict) and knobs:
+        lines.append("knobs:")
+        for key, pair in knobs.items():
+            if isinstance(pair, dict):
+                lines.append(f"  {key}: {pair.get('a')!r} → {pair.get('b')!r}")
+    reading = diff.get("reading") or {}
+    if isinstance(reading, dict) and reading:
+        lines.append("reading:")
+        for key, pair in reading.items():
+            if isinstance(pair, dict):
+                lines.append(f"  {key}: {pair.get('a')!r} → {pair.get('b')!r}")
+    feats = diff.get("features") or {}
+    if isinstance(feats, dict):
+        only_a = feats.get("only_a") or []
+        only_b = feats.get("only_b") or []
+        if only_a or only_b:
+            lines.append("features:")
+            if only_a:
+                lines.append(f"  only in a: {', '.join(only_a)}")
+            if only_b:
+                lines.append(f"  only in b: {', '.join(only_b)}")
+    if diff.get("myth_differs"):
+        lines.append("myth: differs")
+    if diff.get("caption_differs"):
+        lines.append("caption: differs")
+    return "\n".join(lines)

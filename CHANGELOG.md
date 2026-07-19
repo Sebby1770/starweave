@@ -4,6 +4,58 @@ All notable changes to Starweave are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] — 2026-07-19
+
+Wormholes, satellites, wallpaper sizes, seed-space diff, batch manifests, and
+hash stamps — still pure standard-library Python with zero runtime dependencies.
+
+### Added
+
+**New layers**
+
+- `wormhole` — concentric distorted rings funneling into a dark throat; own RNG
+  stream (`wormhole`), feature flag with ~24% odds.
+- `satellite` — tiny craft / station with solar panels near a host planet when
+  the `satellite` feature is on and planets are present; stream `satellite`.
+- `stamp` — optional corner micro-label (only when `--stamp` is set).
+
+**Wallpaper mode**
+
+- `--wallpaper 1920x1080` or presets `desktop` / `1080p` / `1440p` / `4k` set
+  width and height (overrides `--width` / `--height`).
+
+**Seed diff**
+
+- `starweave diff "seed a" "seed b"` prints which World knobs, reading stats,
+  and features differ (text by default; `--json` for machine-readable output).
+
+**Batch manifest**
+
+- `starweave batch` writes `manifest.json` alongside `index.html`, listing each
+  member's seed, path, palette, and world name. Disable with `--no-manifest`.
+
+**Hash stamp**
+
+- Every SVG embeds a short content hash of seed + params in `<metadata>`
+  (`stamp` field).
+- `--stamp` draws that hash as a corner micro-label.
+
+**Seed from file**
+
+- `--seed-file PATH` reads the seed phrase from a file (first non-empty,
+  non-`#` line). Cannot be combined with a positional seed.
+
+**Tests**
+
+- Wormhole determinism and stream independence; wallpaper size parsing and CLI;
+  diff text/JSON; batch manifest shape; stamp metadata + label; seed-file.
+
+### Changed
+
+- Version bump to **0.5.0**.
+- `--quiet` also suppresses the final “Wrote …” status line on single renders
+  (galleries/batch already used it for progress).
+
 ## [0.4.0] — 2026-07-19
 
 Black holes, seed families, world dumps, and palette previews — still pure
