@@ -7,6 +7,7 @@ prefixes (see :mod:`~starweave.svg`) keep gradients from leaking between cells.
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from html import escape
 
@@ -30,6 +31,18 @@ def _strip_xml_decl(svg: str) -> str:
     return svg
 
 
+def _progress(done: int, total: int, label: str = "gallery") -> None:
+    """Simple stderr progress (dots + percent) — no third-party deps."""
+
+    if total <= 0:
+        return
+    pct = int(100 * done / total)
+    sys.stderr.write(f"\r  {label} {'.' * done} {done}/{total} ({pct}%)")
+    if done >= total:
+        sys.stderr.write("\n")
+    sys.stderr.flush()
+
+
 def cells_for(
     seed: str,
     *,
@@ -37,6 +50,7 @@ def cells_for(
     count: int,
     opts: RenderOptions,
     palette: str = "auto",
+    progress: bool = False,
 ) -> list[Cell]:
     """Build gallery cells.
 
@@ -46,10 +60,14 @@ def cells_for(
 
     cells: list[Cell] = []
     if mode == "palettes":
-        for name in sorted(PALETTES):
+        names = sorted(PALETTES)
+        total = len(names)
+        for i, name in enumerate(names):
             world = World.from_seed(seed, name)
             svg = _strip_xml_decl(render_scene(world, opts))
             cells.append(Cell(svg=svg, title=name, subtitle=world.name))
+            if progress:
+                _progress(i + 1, total)
     else:  # variants
         for variant in range(count):
             world = World.from_seed(seed, palette, variant)
@@ -57,6 +75,8 @@ def cells_for(
             cells.append(
                 Cell(svg=svg, title=f"variant {variant}", subtitle=world.name)
             )
+            if progress:
+                _progress(variant + 1, count)
     return cells
 
 

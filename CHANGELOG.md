@@ -4,6 +4,53 @@ All notable changes to Starweave are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-07-19
+
+Black holes, seed families, world dumps, and palette previews — still pure
+standard-library Python with zero runtime dependencies.
+
+### Added
+
+**New layers**
+
+- `blackhole` — event-horizon silhouette, tilted accretion disk, photon-ring
+  glow; own RNG stream (`blackhole`), feature flag with ~22% odds.
+- `supernova` — remnant shells and filament arcs around a bright core; stream
+  `supernova`.
+- `nebula_clusters` — tighter packs of overlapping cloudlets on top of the base
+  nebula wash; stream `nebula_clusters`. New features are appended to the
+  feature table so older feature rolls stay stable.
+
+**Seed family / batch CLI**
+
+- `starweave batch "base" --count 12 --out family/` writes 12 variants with
+  seeds `base#0` … `base#11`, plus an optional `index.html` contact page.
+- Terminal progress (dots + percent on stderr) for batch and galleries.
+
+**World dump & palettes**
+
+- `--dump-world FILE` exports World knobs / features / name / myth as JSON
+  without rendering (or alongside `--out`).
+- `starweave palette-preview --out palettes.svg` — swatch-strip SVG of every
+  built-in palette; `--list-palettes` still lists names and moods.
+
+**ASCII**
+
+- Denser default character ramp for terminal star-art.
+- `--ascii-width N` (alongside existing `--cols`).
+
+**Tests**
+
+- Composability: blackhole / supernova / nebula_clusters present or absent does
+  not change other named stream outputs.
+- Batch writes N files; dump-world JSON keys; palette-preview non-empty;
+  blackhole determinism; reproduce hardening.
+
+### Changed
+
+- Version bump to **0.4.0**.
+- Gallery rendering reports progress on stderr (disable with `--quiet`).
+
 ## [0.3.0] — 2026-06-21
 
 The release that turns a one-shot poster script into a generative engine and a
@@ -66,9 +113,9 @@ morphed, sonified, explored in the browser, or printed as terminal art.
 
 **Quality**
 
-- 46 unit tests (up from 5) covering determinism, well-formed XML across every
-  palette/variant, animation, metadata round-trip, layer selection, morph,
-  semantics, myths, sonification, ASCII, the attractor, and the explorer.
+- Unit tests covering determinism, well-formed XML across every palette/variant,
+  animation, metadata round-trip, layer selection, morph, semantics, myths,
+  sonification, ASCII, the attractor, and the explorer.
 - GitHub Actions CI on Python 3.10–3.13 with a CLI smoke test.
 
 ### Changed

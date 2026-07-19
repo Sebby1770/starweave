@@ -7,8 +7,8 @@ seed, and you can regenerate it from the metadata baked into the file.
 ![Example poster](examples/sebby-launch.svg)
 
 It's pure standard-library Python at runtime (no dependencies), and it can emit
-static posters, **self-contained animated SVGs**, and **HTML contact-sheet
-galleries**.
+static posters, **self-contained animated SVGs**, **seed families**, and **HTML
+contact-sheet galleries**.
 
 ## The idea
 
@@ -20,11 +20,11 @@ stack of **Layers** then paints that world onto an SVG document:
 ```
  seed ── sha256 ──▶  World ────────────────▶  Scene (layer stack) ──▶  SVG
                     │ mood, density,          │ background, nebula,     │ static
-                    │ turbulence,             │ galaxy, aurora, grid,   │ animated
-                    │ features{galaxy,moon,   │ orbits, stars,          │ gallery
-                    │  comets,aurora,rings…}  │ constellations, comets,
-                    │ name "Sigma Lyrae"      │ planets, moon, horizon,
-                    └ stream("stars") …       └ title
+                    │ turbulence,             │ clusters, blackhole,    │ animated
+                    │ features{galaxy,moon,   │ supernova, galaxy,      │ gallery
+                    │  blackhole,supernova…}  │ orbits, stars, planets, │ batch
+                    │ name "Sigma Lyrae"      │ moon, horizon, title
+                    └ stream("stars") …
 ```
 
 Two properties fall out of that design:
@@ -33,8 +33,8 @@ Two properties fall out of that design:
   The world summary and generation params are embedded in the SVG `<metadata>`.
 - **Composable** — every layer draws from its *own* named RNG stream
   (`world.stream("stars")`), so adding, dropping, or reordering layers never
-  changes another layer's output. The galaxy looks identical whether or not
-  comets are drawn.
+  changes another layer's output. The galaxy looks identical whether or not a
+  black hole is drawn.
 
 ## Quick start
 
@@ -65,47 +65,54 @@ starweave "deep field" --gallery 9 --out gallery.html --open
 # One poster per built-in palette, side by side.
 starweave "deep field" --gallery-palettes --out palettes.html
 
-# Seed-space morph: walk the path between two phrases. The structure is held
-# from the first seed while palette and mood interpolate — one sky, shifting.
+# Seed family: 12 related posters (base#0 … base#11) + index.html
+starweave batch "deep field" --count 12 --out family/
+
+# Export the world as JSON (no render), or dump + render together.
+starweave "orbit coffee" --dump-world world.json
+starweave "orbit coffee" --dump-world world.json --out poster.svg
+
+# Swatch strip of every built-in palette.
+starweave palette-preview --out palettes.svg
+
+# Seed-space morph: walk the path between two phrases.
 starweave "ember tide" --morph "glacial drift" --frames 9 --out morph.html
 
 # A self-contained web explorer — type a phrase, morph, save the SVG. No deps.
-starweave --explorer --out web/explorer.html   # then open it in any browser
+starweave --explorer --out web/explorer.html
 
-# Hear the seed: the same World that paints the poster scores a short tune
-# (scale from mood, tempo from turbulence). Pure stdlib -> a deterministic WAV.
+# Hear the seed: deterministic WAV from the same World.
 starweave "the long quiet between stars" --sonify --seconds 12 --out song.wav
 
-# A different medium entirely: the same world as terminal star-art.
-starweave "the long quiet between stars" --ascii --cols 90
+# Terminal star-art (denser ramp; width via --ascii-width or --cols).
+starweave "the long quiet between stars" --ascii --ascii-width 90
+
+# Force or drop layers (blackhole, supernova, nebula_clusters, …).
+starweave "singularity" --without comets,grid
+starweave "minimal" --only background,stars,blackhole,title
+
+# Reproduce any poster from its embedded metadata.
+starweave --reproduce poster.svg --out again.svg
 ```
 
-Some seeds also grow a **strange attractor** — a De Jong chaotic map iterated
-thousands of times, whose four parameters come from the phrase, so each one
-settles into its own luminous, deterministic swirl.
+Some seeds host a **black hole** (event horizon + photon ring + accretion disk),
+a **supernova remnant**, denser **nebula clusters**, a **strange attractor**, or
+an **L-system filament** — each on its own stream so the rest of the sky never
+jitters when a feature flips.
 
-A prebuilt copy lives at [`web/explorer.html`](web/explorer.html) — it can even
-**play the seed's tune** in-browser (Web Audio), mirroring `--sonify`. The
-poster's mood is partly read from the phrase itself: vowel-rich phrases render
-brighter, consonant-heavy ones more turbulent, longer words denser. Some seeds
-also grow an **L-system filament** — a branching structure that emerges from a
-tiny rewrite grammar rather than being hand-placed. Inspect a seed with:
+A prebuilt explorer lives at [`web/explorer.html`](web/explorer.html). Inspect a
+seed with:
 
 ```bash
-starweave "the long quiet between stars" --describe   # see the "reading"
-
-# Inspect the world a seed expands into, without drawing anything.
-starweave "orbit coffee" --describe --palette auto
-
-# Sculpt the composition: keep or drop named layers.
-starweave "clean sky" --without galaxy,comets,grid
-starweave "minimal"   --only background,stars,title
+starweave "the long quiet between stars" --describe
+starweave "orbit coffee" --myth
 ```
 
 ## CLI reference
 
-| Flag | Meaning |
+| Flag / command | Meaning |
 | --- | --- |
+| `seed` | Phrase used to generate the poster. |
 | `--out PATH` | Output file (`.svg`, or `.html` for galleries). |
 | `--width` / `--height` | Canvas size (default 1440×900). |
 | `--stars` / `--planets` | Counts (the world scales density around these). |
@@ -115,15 +122,19 @@ starweave "minimal"   --only background,stars,title
 | `--only A,B` / `--without A,B` | Include or exclude layers by name. |
 | `--gallery [N]` | HTML contact sheet of N seed variants (default 6). |
 | `--gallery-palettes` | Gallery with one poster per palette. |
-| `--morph SEED_B [--frames N]` | Interpolate the seed-space from the seed to `SEED_B`. |
+| `--quiet` | Hide gallery/batch progress on stderr. |
+| `--morph SEED_B [--frames N]` | Interpolate seed-space from the seed to `SEED_B`. |
 | `--explorer` | Write a self-contained interactive web explorer (HTML). |
 | `--sonify [--seconds N]` | Render the seed as a deterministic WAV tune. |
-| `--ascii [--cols N]` | Render the seed as terminal star-art. |
+| `--ascii [--ascii-width N]` | Terminal star-art (`--cols` is an alias). |
 | `--describe` | Print the seed's world as JSON and exit. |
+| `--dump-world FILE` | Write world JSON to FILE (no render unless `--out` too). |
 | `--myth` | Print the constellation's generated origin myth. |
-| `--reproduce FILE` | Regenerate a poster byte-for-byte from an SVG's embedded metadata. |
+| `--reproduce FILE` | Regenerate a poster from an SVG's embedded metadata. |
 | `--title` / `--no-title` | Override or hide the poster title. |
 | `--list-palettes` / `--list-layers` | Discoverability. |
+| `batch BASE --count N --out DIR` | Seed family `BASE#0`…`BASE#N-1` + index HTML. |
+| `palette-preview --out FILE` | SVG swatch strip of every palette. |
 
 Ten palettes ship in the box: `aurora`, `ember`, `midnight`, `solar`, `rose`,
 `noir`, `synthwave`, `glacier`, `verdant`, `gilded` — plus `auto`.
@@ -143,20 +154,25 @@ print(world.name, world.summary()["features"])
 
 ```
 src/starweave/
-  world.py    seed -> World (mood, knobs, features, name, RNG streams)
-  layers.py   composable Layer classes painted back-to-front
-  scene.py    World + layers -> SvgDoc
-  svg.py      SVG document builder (defs, CSS animation, unique ids, metadata)
-  palette.py  ten palettes + deterministic "auto"
-  naming.py   deterministic catalogue names and captions
-  gallery.py  many posters inlined on one self-contained HTML page
-  cli.py      argument parsing and file output
+  world.py           seed -> World (mood, knobs, features, name, RNG streams)
+  layers.py          composable Layer classes painted back-to-front
+  scene.py           World + layers -> SvgDoc
+  svg.py             SVG document builder
+  palette.py         ten palettes + deterministic "auto"
+  palette_preview.py swatch-strip SVG for all palettes
+  batch.py           seed-family rendering
+  naming.py          catalogue names, captions, myths
+  gallery.py         many posters on one HTML page
+  ascii_art.py       terminal star-art
+  cli.py             argument parsing and file output
 ```
 
 ## Development
 
 ```bash
-PYTHONPATH=src python3 -m unittest discover -s tests
+python3 -m pip install -e . -q
+python3 -m pytest tests/ -q
+# or: PYTHONPATH=src python3 -m unittest discover -s tests
 ```
 
 CI runs the suite on Python 3.10–3.13 and smoke-tests the CLI on every push.

@@ -37,6 +37,8 @@ _MOOD_BIAS = {
 }
 
 # Optional celestial features and the odds each one shows up in a world.
+# Order is fixed so new entries appended at the end never reshuffle older rolls
+# (composability of the features stream across releases).
 _FEATURE_ODDS = {
     "galaxy": 0.42,
     "comets": 0.55,
@@ -47,6 +49,9 @@ _FEATURE_ODDS = {
     "grid": 0.25,
     "filament": 0.4,
     "attractor": 0.35,
+    "blackhole": 0.22,
+    "supernova": 0.28,
+    "nebula_clusters": 0.32,
 }
 
 
