@@ -54,6 +54,8 @@ _FEATURE_ODDS = {
     "nebula_clusters": 0.32,
     "wormhole": 0.24,
     "satellite": 0.45,
+    "pulsar": 0.26,
+    "dust_lane": 0.48,
 }
 
 

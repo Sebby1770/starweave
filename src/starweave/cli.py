@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .batch import render_batch
 from .gallery import cells_for, render_gallery
-from .morph import morph_cells, render_morph
+from .morph import morph_cells, render_morph, write_morph_frames
 from .layers import DEFAULT_LAYERS, LAYERS_BY_NAME, Layer
 from .options import (
     DEFAULT_HEIGHT,
@@ -22,6 +22,8 @@ from .options import (
 from .palette import CHOICES, PALETTES
 from .palette_preview import palette_preview_svg
 from .render import render_poster
+from .themes import THEME_CHOICES, THEMES, get_theme
+from .validate import validate_svg_file
 from .webexport import explorer_html
 from .world import World, diff_worlds, format_diff
 
@@ -36,13 +38,16 @@ def main(argv: list[str] | None = None) -> int:
         return _run_palette_preview_cmd(argv[1:])
     if argv and argv[0] == "diff":
         return _run_diff_cmd(argv[1:])
+    if argv and argv[0] == "validate":
+        return _run_validate_cmd(argv[1:])
 
     parser = _build_parser()
     args = parser.parse_args(argv)
 
     if args.list_palettes:
         for name in sorted(PALETTES):
-            print(f"{name:<10} ({PALETTES[name].mood})")
+            print(f"{name:<12} ({PALETTES[name].mood})")
+        print(f"{'okabe-ito':<12} (alias of colorblind)")
         return 0
 
     if args.list_layers:
@@ -50,6 +55,29 @@ def main(argv: list[str] | None = None) -> int:
             tag = f" [needs '{layer.requires}']" if layer.requires else ""
             print(f"{layer.name}{tag}")
         return 0
+
+    if args.list_themes:
+        for name in THEME_CHOICES:
+            theme = THEMES[name]
+            print(
+                f"{name:<10} palette={theme.palette}  "
+                f"turb×{theme.turbulence:.2f} bright×{theme.brightness:.2f} "
+                f"dens×{theme.density:.2f}  — {theme.description}"
+            )
+        return 0
+
+    # Resolve theme early — it locks palette + intensity bias.
+    theme_name: str | None = getattr(args, "theme", None)
+    if theme_name:
+        try:
+            theme = get_theme(theme_name)
+        except ValueError as exc:
+            parser.error(str(exc))
+        args.palette = theme.palette
+
+    # Multi-seed list rendering: write one poster per line into --out dir.
+    if getattr(args, "seed_list", None):
+        return _run_seed_list(args, parser)
 
     try:
         seed = _resolve_seed(args)
@@ -64,12 +92,12 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(str(exc))
 
     if args.describe:
-        world = World.from_seed(seed, args.palette, args.variant)
+        world = _world_for(seed, args)
         print(json.dumps(world.summary(), indent=2, sort_keys=True))
         return 0
 
     if args.dump_world:
-        world = World.from_seed(seed, args.palette, args.variant)
+        world = _world_for(seed, args)
         path = Path(args.dump_world)
         if str(path.parent) not in ("", "."):
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -83,11 +111,12 @@ def main(argv: list[str] | None = None) -> int:
         # without another exclusive mode. If only --dump-world, stop here.
         if not args.out and not args.ascii and not args.sonify and not args.gallery \
                 and args.gallery is None and not args.gallery_palettes \
-                and args.morph is None and not args.explorer and not args.reproduce:
+                and args.morph is None and not args.explorer and not args.reproduce \
+                and not getattr(args, "out_dir", None):
             return 0
 
     if args.myth:
-        world = World.from_seed(seed, args.palette, args.variant)
+        world = _world_for(seed, args)
         print(world.name)
         print(world.myth)
         return 0
@@ -110,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.ascii:
         from .ascii_art import ascii_poster
 
-        world = World.from_seed(seed, args.palette, args.variant)
+        world = _world_for(seed, args)
         cols = args.ascii_width if args.ascii_width is not None else args.cols
         art = ascii_poster(world, cols=cols)
         if args.out:
@@ -124,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.sonify:
         from .sonify import sonify
 
-        world = World.from_seed(seed, args.palette, args.variant)
+        world = _world_for(seed, args)
         output = Path(args.out or "starweave.wav")
         if str(output.parent) not in ("", "."):
             output.parent.mkdir(parents=True, exist_ok=True)
@@ -157,6 +186,8 @@ def main(argv: list[str] | None = None) -> int:
             animate=args.animate,
             variant=args.variant,
             stamp=args.stamp,
+            theme=theme_name,
+            minify=bool(getattr(args, "minify", False)),
             layers=layers,
         )
     except ValueError as exc:
@@ -167,6 +198,21 @@ def main(argv: list[str] | None = None) -> int:
     if not args.quiet:
         print(f"Wrote {output}")
     return 0
+
+
+def _world_for(seed: str, args: argparse.Namespace) -> World:
+    """Build a World, applying theme intensity bias when set."""
+
+    from .themes import apply_theme
+
+    palette = args.palette
+    theme_name = getattr(args, "theme", None)
+    if theme_name:
+        theme = get_theme(theme_name)
+        palette = theme.palette
+        world = World.from_seed(seed, palette, getattr(args, "variant", 0))
+        return apply_theme(world, theme)
+    return World.from_seed(seed, palette, getattr(args, "variant", 0))
 
 
 def _resolve_seed(args: argparse.Namespace) -> str:
@@ -196,6 +242,108 @@ def _resolve_seed(args: argparse.Namespace) -> str:
     return args.seed or "starweave"
 
 
+def _read_seed_list(path: Path) -> list[str]:
+    """Read one seed phrase per line; skip blanks and # comments."""
+
+    if not path.is_file():
+        raise ValueError(f"seed-list file not found: {path}")
+    seeds: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        seeds.append(line)
+    if not seeds:
+        raise ValueError(f"seed-list file has no usable lines: {path}")
+    return seeds
+
+
+def _safe_filename(seed: str, index: int) -> str:
+    base = "".join(c if c.isalnum() or c in "-_" else "_" for c in seed)
+    base = base.strip("_") or f"seed_{index}"
+    # Cap length so paths stay reasonable.
+    if len(base) > 60:
+        base = base[:60]
+    return f"{index:03d}_{base}.svg"
+
+
+def _run_seed_list(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        seeds = _read_seed_list(Path(args.seed_list))
+    except ValueError as exc:
+        parser.error(str(exc))
+
+    if args.wallpaper:
+        try:
+            args.width, args.height = parse_wallpaper(args.wallpaper)
+        except ValueError as exc:
+            parser.error(str(exc))
+
+    out_spec = args.out
+    if not out_spec:
+        parser.error("--seed-list requires --out DIR/")
+    out_dir = Path(out_spec)
+    # Treat as directory always for multi-seed output.
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        layers = _select_layers(args.only, args.without)
+    except ValueError as exc:
+        parser.error(str(exc))
+
+    theme_name = getattr(args, "theme", None)
+    written: list[Path] = []
+    for i, seed in enumerate(seeds):
+        try:
+            svg = render_poster(
+                seed,
+                width=args.width,
+                height=args.height,
+                stars=args.stars,
+                planets=args.planets,
+                palette=args.palette,
+                title=args.title,
+                show_title=not args.no_title,
+                animate=args.animate,
+                variant=args.variant,
+                stamp=args.stamp,
+                theme=theme_name,
+                minify=bool(getattr(args, "minify", False)),
+                layers=layers,
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
+        path = out_dir / _safe_filename(seed, i)
+        path.write_text(svg, encoding="utf-8")
+        written.append(path)
+        if not args.quiet:
+            sys.stderr.write(f"\r  seed-list {i + 1}/{len(seeds)}")
+            sys.stderr.flush()
+    if not args.quiet:
+        sys.stderr.write("\n")
+        print(f"Wrote {len(written)} posters to {out_dir}/")
+    return 0
+
+
+def _run_validate_cmd(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="starweave validate",
+        description="Check that an SVG embeds Starweave reproducibility metadata.",
+    )
+    parser.add_argument("files", nargs="+", help="SVG file(s) to validate.")
+    parser.add_argument("--quiet", action="store_true", help="Only set exit status.")
+    args = parser.parse_args(argv)
+
+    exit_code = 0
+    for file in args.files:
+        result = validate_svg_file(file)
+        if not result.ok:
+            exit_code = 1
+        if not args.quiet:
+            print(result.summary())
+    return exit_code
+
+
 def _run_batch_cmd(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         prog="starweave batch",
@@ -205,6 +353,7 @@ def _run_batch_cmd(argv: list[str]) -> int:
     parser.add_argument("--count", type=_positive_int, default=12, help="Number of family members (default 12).")
     parser.add_argument("--out", required=True, help="Output directory for the family.")
     parser.add_argument("--palette", choices=CHOICES, default="aurora")
+    parser.add_argument("--theme", choices=THEME_CHOICES, help="Theme pack (overrides palette + intensity).")
     parser.add_argument("--width", type=_positive_int, default=DEFAULT_WIDTH)
     parser.add_argument("--height", type=_positive_int, default=DEFAULT_HEIGHT)
     parser.add_argument("--wallpaper", metavar="SPEC", help="Size preset or WxH (overrides width/height).")
@@ -214,6 +363,7 @@ def _run_batch_cmd(argv: list[str]) -> int:
     parser.add_argument("--no-title", action="store_true")
     parser.add_argument("--title", help="Title override applied to every member.")
     parser.add_argument("--stamp", action="store_true", help="Draw corner hash stamp on each poster.")
+    parser.add_argument("--minify", action="store_true", help="Collapse inter-tag whitespace in each SVG.")
     parser.add_argument("--no-index", action="store_true", help="Skip writing index.html.")
     parser.add_argument("--no-manifest", action="store_true", help="Skip writing manifest.json.")
     parser.add_argument("--quiet", action="store_true", help="Hide progress on stderr.")
@@ -226,6 +376,11 @@ def _run_batch_cmd(argv: list[str]) -> int:
         except ValueError as exc:
             parser.error(str(exc))
 
+    palette = args.palette
+    theme_name = args.theme
+    if theme_name:
+        palette = get_theme(theme_name).palette
+
     opts = RenderOptions(
         width=width,
         height=height,
@@ -237,16 +392,67 @@ def _run_batch_cmd(argv: list[str]) -> int:
         stamp=args.stamp,
     )
     out_dir = Path(args.out)
-    members = render_batch(
-        args.base,
-        args.count,
-        out_dir,
-        palette=args.palette,
-        opts=opts,
-        progress=not args.quiet,
-        index_html=not args.no_index,
-        manifest=not args.no_manifest,
-    )
+
+    # Batch currently goes through render_poster per member; when theme/minify
+    # are set, re-render with those knobs after the standard batch, or patch
+    # render_batch usage. Simpler: custom loop when theme or minify is set.
+    if theme_name or args.minify:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        members = []
+        from .batch import BatchMember, family_seed, _batch_index_html, _batch_manifest
+
+        for i in range(args.count):
+            seed = family_seed(args.base, i)
+            safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in seed)
+            path = out_dir / f"{safe}.svg"
+            svg = render_poster(
+                seed,
+                width=opts.width,
+                height=opts.height,
+                stars=opts.stars,
+                planets=opts.planets,
+                palette=palette,
+                title=opts.title,
+                show_title=opts.show_title,
+                animate=opts.animate,
+                stamp=opts.stamp,
+                theme=theme_name,
+                minify=args.minify,
+            )
+            path.write_text(svg, encoding="utf-8")
+            world = World.from_seed(seed, palette)
+            members.append(
+                BatchMember(
+                    seed=seed,
+                    index=i,
+                    path=path,
+                    world_name=world.name,
+                    palette=world.palette.name,
+                )
+            )
+            if not args.quiet:
+                from .batch import _progress
+
+                _progress(i + 1, args.count)
+        if not args.no_index:
+            (out_dir / "index.html").write_text(
+                _batch_index_html(args.base, members), encoding="utf-8"
+            )
+        if not args.no_manifest:
+            (out_dir / "manifest.json").write_text(
+                _batch_manifest(args.base, members, palette=palette), encoding="utf-8"
+            )
+    else:
+        members = render_batch(
+            args.base,
+            args.count,
+            out_dir,
+            palette=palette,
+            opts=opts,
+            progress=not args.quiet,
+            index_html=not args.no_index,
+            manifest=not args.no_manifest,
+        )
     # Final summary always prints (quiet only hides the progress bar).
     print(f"Wrote {len(members)} posters to {out_dir}/")
     if not args.no_index:
@@ -355,6 +561,7 @@ def _run_reproduce(args: argparse.Namespace) -> int:
         palette=world["palette"],
         variant=world["variant"],
         animate=params.get("animated", False),
+        minify=bool(getattr(args, "minify", False)),
     )
     output = Path(args.out or "reproduced.svg")
     _write(output, svg, args.open)
@@ -376,13 +583,42 @@ def _run_morph(args: argparse.Namespace, seed: str) -> int:
         animate=args.animate,
         stamp=args.stamp,
     )
+    minify = bool(getattr(args, "minify", False))
+    out_dir = getattr(args, "out_dir", None)
+
+    # Individual frame SVGs when --out-dir is set.
+    if out_dir:
+        try:
+            paths = write_morph_frames(
+                seed,
+                args.morph,
+                frames=args.frames,
+                palette=args.palette,
+                opts=opts,
+                out_dir=Path(out_dir),
+                minify=minify,
+            )
+        except ValueError as exc:
+            print(f"starweave: {exc}", file=sys.stderr)
+            return 2
+        if not args.quiet:
+            print(f"Wrote {len(paths)} frames to {out_dir}/")
+        # Also write HTML strip if --out was given alongside --out-dir.
+        if not args.out:
+            return 0
+
     try:
         cells = morph_cells(seed, args.morph, frames=args.frames, palette=args.palette, opts=opts)
     except ValueError as exc:
         print(f"starweave: {exc}", file=sys.stderr)
         return 2
     html = render_morph(seed, args.morph, cells)
+    if minify:
+        # HTML minify is not attempted; minify only applies to SVG frames above.
+        pass
     output = Path(args.out or "morph.html")
+    if out_dir and not args.out:
+        return 0
     _write(output, html, args.open)
     if not args.quiet:
         print(f"Wrote {output} ({len(cells)} frames: {seed!r} -> {args.morph!r})")
@@ -423,7 +659,17 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("seed", nargs="?", help="Phrase used to generate the poster.")
     parser.add_argument("--seed-file", metavar="PATH", help="Read seed phrase from a file (first non-empty, non-# line).")
-    parser.add_argument("--out", help="Output path (.svg, or .html for galleries).")
+    parser.add_argument(
+        "--seed-list",
+        metavar="FILE",
+        help="Read many seeds (one per line) and write each poster into --out DIR/.",
+    )
+    parser.add_argument("--out", help="Output path (.svg, or .html for galleries). Directory when used with --seed-list.")
+    parser.add_argument(
+        "--out-dir",
+        metavar="DIR",
+        help="With --morph: write individual frame_00.svg … SVGs into DIR.",
+    )
     parser.add_argument("--width", type=_positive_int, default=DEFAULT_WIDTH, help="Poster width.")
     parser.add_argument("--height", type=_positive_int, default=DEFAULT_HEIGHT, help="Poster height.")
     parser.add_argument(
@@ -433,10 +679,16 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--stars", type=_positive_int, default=DEFAULT_STARS, help="Number of stars.")
     parser.add_argument("--planets", type=_positive_int, default=DEFAULT_PLANETS, help="Number of planets.")
-    parser.add_argument("--palette", choices=CHOICES, default="aurora", help="Color palette ('auto' picks from the seed).")
+    parser.add_argument("--palette", choices=CHOICES, default="aurora", help="Color palette ('auto' picks from the seed; 'colorblind'/'okabe-ito' is colourblind-safe).")
+    parser.add_argument(
+        "--theme",
+        choices=THEME_CHOICES,
+        help="Theme pack: noir|biolume|ember|ice — fixed palette + intensity bias (overrides --palette).",
+    )
     parser.add_argument("--variant", type=int, default=0, help="Alternate deterministic draw of the same seed.")
     parser.add_argument("--animate", action="store_true", help="Emit an animated SVG (twinkle/drift/orbit).")
     parser.add_argument("--stamp", action="store_true", help="Draw a corner micro-label with a short content hash.")
+    parser.add_argument("--minify", action="store_true", help="Collapse inter-tag whitespace in SVG output.")
     parser.add_argument("--only", help="Comma-separated layers to keep (e.g. background,stars,title).")
     parser.add_argument("--without", help="Comma-separated layers to drop.")
     parser.add_argument("--title", help="Title printed on the poster.")
@@ -459,6 +711,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--quiet", action="store_true", help="Suppress status lines (progress still uses --quiet for galleries/batch).")
     parser.add_argument("--list-palettes", action="store_true", help="List palette names and exit.")
     parser.add_argument("--list-layers", action="store_true", help="List layer names and exit.")
+    parser.add_argument("--list-themes", action="store_true", help="List theme packs and exit.")
     return parser
 
 

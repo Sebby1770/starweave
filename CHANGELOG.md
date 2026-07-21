@@ -4,6 +4,24 @@ All notable changes to Starweave are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] — 2026-07-21
+
+Pulsars, dust lanes, theme packs, multi-seed lists, SVG minify, validate,
+Okabe–Ito / colorblind palette, and morph frame export — still pure stdlib.
+
+### Added
+- **pulsar** / **dust_lane** layers with independent RNG streams
+- **Theme packs** (`noir`, `biolume`, `ember`, `ice`) via `--theme`
+- **`--seed-list`** multi-seed batch into a directory
+- **`--minify`** lightweight SVG whitespace collapse
+- **`starweave validate`** reproducibility metadata check
+- **colorblind / okabe-ito** palette
+- **`--out-dir`** with `--morph` writes `frame_00.svg` …
+- Wallpaper, seed-list, and theme CLI tests
+
+### Changed
+- Version **0.6.0**
+
 ## [0.5.0] — 2026-07-19
 
 Wormholes, satellites, wallpaper sizes, seed-space diff, batch manifests, and

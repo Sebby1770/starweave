@@ -117,24 +117,46 @@ PALETTES: dict[str, Palette] = {
         accent=("#fbbf24", "#fcd34d", "#f59e0b"),
         mood="radiant",
     ),
+    # Okabe–Ito inspired colourblind-safe set (orange / sky / bluish-green /
+    # yellow / blue / vermillion / reddish-purple) on a deep navy ground.
+    "colorblind": Palette(
+        name="colorblind",
+        background=("#0b1020", "#1a1f36"),
+        nebula=("#E69F00", "#56B4E9", "#009E73", "#CC79A7"),
+        stars=("#F0E442", "#FFFFFF", "#56B4E9", "#E69F00"),
+        planets=("#0072B2", "#D55E00", "#009E73", "#CC79A7"),
+        accent=("#E69F00", "#56B4E9", "#D55E00"),
+        mood="balanced",
+    ),
+}
+
+#: Alias accepted on the CLI; resolves to the ``colorblind`` palette entry.
+_PALETTE_ALIASES: dict[str, str] = {
+    "okabe-ito": "colorblind",
+    "okabe_ito": "colorblind",
 }
 
 #: Palette names a user can pick on the CLI, plus the special ``auto`` token.
-CHOICES: tuple[str, ...] = tuple(sorted(PALETTES)) + ("auto",)
+CHOICES: tuple[str, ...] = (
+    tuple(sorted(PALETTES)) + ("auto", "okabe-ito")
+)
 
 
 def resolve_palette_name(name: str, seed: str) -> str:
-    """Resolve a requested palette name, expanding ``auto`` from the seed."""
+    """Resolve a requested palette name, expanding ``auto`` / aliases from the seed."""
 
+    if name in _PALETTE_ALIASES:
+        return _PALETTE_ALIASES[name]
     if name != "auto":
         return name
     digest = hashlib.sha256(f"starweave-palette|{seed}".encode()).digest()
+    # Auto only picks among "real" named palettes (not aliases).
     names = sorted(PALETTES)
     return names[digest[0] % len(names)]
 
 
 def get_palette(name: str, seed: str = "") -> Palette:
-    """Look up a palette by name. ``auto`` is resolved from ``seed`` first."""
+    """Look up a palette by name. ``auto`` / aliases are resolved first."""
 
     resolved = resolve_palette_name(name, seed)
     try:
@@ -142,7 +164,7 @@ def get_palette(name: str, seed: str = "") -> Palette:
     except KeyError as exc:
         available = ", ".join(sorted(PALETTES))
         raise ValueError(
-            f"Unknown palette {name!r}. Choose from: {available}, auto"
+            f"Unknown palette {name!r}. Choose from: {available}, auto, okabe-ito"
         ) from exc
 
 
