@@ -361,6 +361,176 @@ class Galaxy(Layer):
             + "\n".join(dots)
             + "</g>"
         )
+        # Share geometry so dust_lane can cut across the same spiral.
+        doc.shared["galaxy"] = {
+            "cx": cx,
+            "cy": cy,
+            "tilt": tilt,
+            "squash": squash,
+            "scale": scale,
+            "arms": arms,
+        }
+
+
+# --------------------------------------------------------------------------- #
+# Dust lane — dark absorption bands across a galaxy
+# --------------------------------------------------------------------------- #
+class DustLane(Layer):
+    """Dark dust lanes cut across the galaxy disk when both ``galaxy`` and
+    ``dust_lane`` features are on. Own stream ``dust_lane``."""
+
+    name = "dust_lane"
+    requires = "dust_lane"
+
+    def applies(self, world: World) -> bool:
+        return world.has("dust_lane") and world.has("galaxy")
+
+    def build(self, world: World, doc: SvgDoc, opts: RenderOptions) -> None:
+        geo = doc.shared.get("galaxy")
+        if not geo:
+            return
+        rng = self.rng(world)
+        cx = float(geo["cx"])  # type: ignore[index]
+        cy = float(geo["cy"])  # type: ignore[index]
+        tilt = float(geo["tilt"])  # type: ignore[index]
+        squash = float(geo["squash"])  # type: ignore[index]
+        scale = float(geo["scale"])  # type: ignore[index]
+        shade = world.palette.background[0]
+        deep = world.palette.background[1]
+
+        lanes = rng.randint(2, 4)
+        parts: list[str] = [
+            f'<g transform="rotate({fmt(tilt)} {fmt(cx)} {fmt(cy)})" '
+            f'style="mix-blend-mode: multiply">'
+        ]
+        for i in range(lanes):
+            # Slightly offset curved bands across the disk major axis.
+            offset = (i - (lanes - 1) / 2) * scale * rng.uniform(1.2, 2.4)
+            length = scale * rng.uniform(18, 32)
+            thickness = scale * rng.uniform(0.9, 2.2)
+            # Soft ellipse = absorption lane.
+            color = shade if i % 2 == 0 else deep
+            op = rng.uniform(0.22, 0.42) * (0.7 + 0.3 * world.density)
+            rot = rng.uniform(-12, 12)
+            parts.append(
+                f'<ellipse cx="{fmt(cx + offset * 0.15)}" cy="{fmt(cy + offset)}" '
+                f'rx="{fmt(length)}" ry="{fmt(thickness * squash)}" '
+                f'fill="{color}" opacity="{op:.2f}" filter="{doc.url("soft")}" '
+                f'transform="rotate({fmt(rot)} {fmt(cx)} {fmt(cy)})" />'
+            )
+            # Thinner darker core of the lane.
+            parts.append(
+                f'<ellipse cx="{fmt(cx + offset * 0.1)}" cy="{fmt(cy + offset)}" '
+                f'rx="{fmt(length * 0.85)}" ry="{fmt(thickness * squash * 0.35)}" '
+                f'fill="{deep}" opacity="{min(0.55, op + 0.12):.2f}" '
+                f'transform="rotate({fmt(rot)} {fmt(cx)} {fmt(cy)})" />'
+            )
+        parts.append("</g>")
+        doc.add("\n".join(parts))
+
+
+# --------------------------------------------------------------------------- #
+# Pulsar — lighthouse beacon beams from a compact object
+# --------------------------------------------------------------------------- #
+class Pulsar(Layer):
+    """Beacon beams / lighthouse pulses from a compact stellar remnant.
+
+    Entirely driven by the ``pulsar`` stream so other layers stay stable.
+    """
+
+    name = "pulsar"
+    requires = "pulsar"
+
+    def build(self, world: World, doc: SvgDoc, opts: RenderOptions) -> None:
+        rng = self.rng(world)
+        w, h = opts.width, opts.height
+        cx = w * rng.uniform(0.25, 0.75)
+        cy = h * rng.uniform(0.2, 0.7)
+        core_r = min(w, h) * rng.uniform(0.008, 0.018)
+        beam_len = min(w, h) * rng.uniform(0.28, 0.55)
+        n_beams = rng.choice((2, 2, 4))  # usually opposite pair
+        base_angle = rng.uniform(0, math.tau)
+        hot = rng.choice(world.palette.stars)
+        accent = rng.choice(world.palette.accent)
+        glow = rng.choice(world.palette.nebula)
+
+        parts: list[str] = ['<g style="mix-blend-mode: screen">']
+        # Soft ambient halo.
+        halo_id = doc.ref("pshalo")
+        doc.add_def(
+            f'<radialGradient id="{halo_id}" cx="50%" cy="50%" r="50%">'
+            f'<stop offset="0%" stop-color="{hot}" stop-opacity="0.85" />'
+            f'<stop offset="40%" stop-color="{accent}" stop-opacity="0.25" />'
+            f'<stop offset="100%" stop-color="{glow}" stop-opacity="0" />'
+            f"</radialGradient>"
+        )
+        parts.append(
+            f'<circle cx="{fmt(cx)}" cy="{fmt(cy)}" r="{fmt(core_r * 6)}" '
+            f'fill="url(#{halo_id})" opacity="0.9" />'
+        )
+
+        # Lighthouse beams — tapered wedges of light.
+        for i in range(n_beams):
+            ang = base_angle + i * (math.tau / n_beams)
+            half = rng.uniform(0.06, 0.12)  # half-width in radians
+            # Outer tip of the beam.
+            tip_x = cx + math.cos(ang) * beam_len
+            tip_y = cy + math.sin(ang) * beam_len
+            # Wide base near the core, tapering out — two side points near tip.
+            side = beam_len * math.tan(half)
+            px = -math.sin(ang) * side
+            py = math.cos(ang) * side
+            # Near-core width.
+            near = core_r * 1.4
+            nx = -math.sin(ang) * near
+            ny = math.cos(ang) * near
+            path = (
+                f"M {fmt(cx + nx)} {fmt(cy + ny)} "
+                f"L {fmt(tip_x + px)} {fmt(tip_y + py)} "
+                f"L {fmt(tip_x - px)} {fmt(tip_y - py)} "
+                f"L {fmt(cx - nx)} {fmt(cy - ny)} Z"
+            )
+            op = 0.12 + 0.18 * world.brightness
+            parts.append(
+                f'<path d="{path}" fill="{hot}" opacity="{op:.2f}" '
+                f'filter="{doc.url("soft")}" />'
+            )
+            # Brighter spine of the beam.
+            parts.append(
+                f'<line x1="{fmt(cx)}" y1="{fmt(cy)}" '
+                f'x2="{fmt(tip_x)}" y2="{fmt(tip_y)}" '
+                f'stroke="{accent}" stroke-width="{max(0.8, core_r * 0.35):.1f}" '
+                f'opacity="{0.35 + 0.25 * world.brightness:.2f}" '
+                f'stroke-linecap="round" filter="{doc.url("glow")}" />'
+            )
+
+        # Compact object core.
+        parts.append(
+            f'<circle cx="{fmt(cx)}" cy="{fmt(cy)}" r="{fmt(core_r)}" '
+            f'fill="{hot}" opacity="0.98" filter="{doc.url("glow")}" />'
+        )
+        parts.append(
+            f'<circle cx="{fmt(cx)}" cy="{fmt(cy)}" r="{fmt(core_r * 0.45)}" '
+            f'fill="#ffffff" opacity="0.9" />'
+        )
+
+        if opts.animate:
+            dur = rng.uniform(4, 10)
+            # Pulse opacity on the whole group via SMIL for self-contained SVG.
+            parts.append(
+                f'<animate attributeName="opacity" values="0.55;1;0.55" '
+                f'dur="{dur:.1f}s" repeatCount="indefinite" />'
+            )
+            # Slow rotation of the beacon.
+            spin_dur = rng.uniform(18, 40)
+            parts.append(
+                f'<animateTransform attributeName="transform" type="rotate" '
+                f'from="0 {fmt(cx)} {fmt(cy)}" to="360 {fmt(cx)} {fmt(cy)}" '
+                f'dur="{spin_dur:.0f}s" repeatCount="indefinite" />'
+            )
+        parts.append("</g>")
+        doc.add("\n".join(parts))
+        doc.shared["pulsar_center"] = (cx, cy, core_r)
 
 
 # --------------------------------------------------------------------------- #
@@ -1044,7 +1214,9 @@ DEFAULT_LAYERS: tuple[Layer, ...] = (
     Blackhole(),
     Wormhole(),
     Supernova(),
+    Pulsar(),
     Galaxy(),
+    DustLane(),
     Attractor(),
     AuroraBand(),
     Filament(),

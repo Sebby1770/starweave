@@ -9,6 +9,7 @@ callers don't need to know that.
 from __future__ import annotations
 
 from .layers import DEFAULT_LAYERS, Layer
+from .minify import minify_svg
 from .options import (
     DEFAULT_HEIGHT,
     DEFAULT_PLANETS,
@@ -17,6 +18,7 @@ from .options import (
     RenderOptions,
 )
 from .scene import render_scene
+from .themes import Theme, apply_theme, get_theme
 from .world import World
 
 __all__ = [
@@ -46,6 +48,8 @@ def render_poster(
     animate: bool = False,
     variant: int = 0,
     stamp: bool = False,
+    theme: str | Theme | None = None,
+    minify: bool = False,
     layers: tuple[Layer, ...] = DEFAULT_LAYERS,
 ) -> str:
     """Return a deterministic SVG poster for ``seed``.
@@ -54,6 +58,8 @@ def render_poster(
     the whole world to a different (still deterministic) draw of the same seed.
     ``animate=True`` emits a self-contained animated SVG (twinkle/drift/orbit).
     ``stamp=True`` draws a corner micro-label with a short content hash.
+    ``theme`` selects a fixed palette + intensity bias (overrides ``palette``).
+    ``minify=True`` collapses inter-tag whitespace in the SVG.
     """
 
     _validate_positive("width", width)
@@ -61,7 +67,14 @@ def render_poster(
     _validate_positive("stars", stars)
     _validate_positive("planets", planets)
 
+    theme_obj: Theme | None = None
+    if theme is not None:
+        theme_obj = theme if isinstance(theme, Theme) else get_theme(theme)
+        palette = theme_obj.palette
+
     world = World.from_seed(seed, palette, variant)
+    if theme_obj is not None:
+        apply_theme(world, theme_obj)
     opts = RenderOptions(
         width=width,
         height=height,
@@ -72,4 +85,7 @@ def render_poster(
         animate=animate,
         stamp=stamp,
     )
-    return render_scene(world, opts, layers)
+    svg = render_scene(world, opts, layers)
+    if minify:
+        return minify_svg(svg)
+    return svg
